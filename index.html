@@ -100,6 +100,9 @@
       <label>Whose preferences?</label>
       <select id="prefWho"></select>
       <table id="prefTable"></table>
+      <label>Or paste many at once (one player per line): <b>Name: +likes, -rather not</b></label>
+      <textarea id="prefPaste" placeholder="Sam Lee: +Jo, +Alex Smith, -Max"></textarea>
+      <button class="btn sec" id="prefImport">Import preferences</button>
     </div>
   </section>
 
@@ -368,6 +371,27 @@ function renderPlayers(){
   document.querySelectorAll('.pdel').forEach(e=>e.onclick=()=>{ if(!confirm('Remove '+by(e.dataset.id).name+'?'))return; S.players=S.players.filter(p=>p.id!=e.dataset.id); save(); renderPlayers(); });
   renderPrefs();
 }
+
+$('#prefImport').onclick = () => {
+  const find = n => S.players.find(p => p.name.trim().toLowerCase() === n.trim().toLowerCase());
+  const bad = []; let ok = 0;
+  for (const raw of $('#prefPaste').value.split('\n')) {
+    const line = raw.trim(); if (!line) continue;
+    const i = line.indexOf(':'); const me = i > 0 ? find(line.slice(0, i)) : null;
+    if (!me) { bad.push(line); continue; }
+    me.prefer = me.prefer || []; me.avoid = me.avoid || [];
+    for (const tok of line.slice(i + 1).split(',')) {
+      const t = tok.trim(); if (!t) continue;
+      const o = find(t.replace(/^[+-]\s*/, ''));
+      if (!o || o === me || o.level !== me.level) { bad.push(me.name + ': ' + t); continue; }
+      me.prefer = me.prefer.filter(x => x !== o.id); me.avoid = me.avoid.filter(x => x !== o.id);
+      (t.startsWith('-') ? me.avoid : me.prefer).push(o.id); ok++;
+    }
+  }
+  save(); renderPrefs();
+  $('#prefPaste').value = bad.join('\n');
+  alert(`Imported ${ok} preference(s).` + (bad.length ? ` ${bad.length} not matched, left in the box.` : ''));
+};
 
 let prefWho = null;
 function renderPrefs(){
