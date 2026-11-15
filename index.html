@@ -75,11 +75,6 @@
       <p class="muted">8 on a court = 4 play, 4 sit each game.</p>
     </div>
     <div class="card">
-      <h2>Host PIN 🔒</h2>
-      <p class="muted">Protects the private preferences and Player mode. Set a 4-digit PIN that only hosts know.</p>
-      <button class="btn sec" id="setPin">Set / change PIN</button>
-    </div>
-    <div class="card">
       <h2>Session</h2>
       <button class="btn sec" id="newSession">Start a new session (keep players, reset games)</button>
       <button class="btn sec" id="clearAll">Clear everything</button>
@@ -103,7 +98,7 @@
       <h2>Private preferences 🔒</h2>
       <p class="muted">Only on this device, never shown on the Play screen. 👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible).</p>
       <button class="btn" id="kioskOpen">📱 Player mode: let players add their own (private)</button>
-      <button class="btn sec" id="prefUnlock">🔒 Show / edit preferences (host PIN)</button>
+      <button class="btn sec" id="prefUnlock">🔒 Show / edit preferences (host only)</button>
       <div id="prefHost" style="display:none">
       <label>Whose preferences?</label>
       <select id="prefWho"></select>
@@ -129,7 +124,7 @@
 
 <!-- PLAYER PREFERENCE MODE (shown full-screen on the host's phone/iPad) -->
 <div id="kiosk" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:20;overflow:auto">
-  <header><h1>🏸 Who do you like playing with?</h1><nav><button id="kioskExit">Host</button></nav></header>
+  <header><h1>🏸 Who do you like playing with?</h1><nav><button id="kioskExit">Exit</button></nav></header>
   <main id="kioskBody"></main>
 </div>
 
@@ -388,7 +383,8 @@ if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () => {
+  $('#prefHost').style.display='none';
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x===b));
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('on', s.id===b.dataset.tab));
   render();
@@ -555,21 +551,14 @@ function renderKiosk(){
   };
   $('#kCancel').onclick = () => { kioskMe=null; kioskPick={}; renderKiosk(); };
 }
-$('#kioskOpen').onclick = () => { if (!S.pin) return alert('Set a host PIN first (Setup tab → Host PIN), so players can\'t leave Player mode.'); $('#prefHost').style.display='none'; kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
-function askPin(msg){
-  if (!S.pin) { alert('Set a host PIN first (Setup tab → Host PIN).'); return false; }
-  const v = prompt(msg || 'Host PIN'); if (v === null) return false;
-  if (v === S.pin) return true; alert('Wrong PIN.'); return false;
+$('#kioskOpen').onclick = () => { $('#prefHost').style.display='none'; kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
+function goTab(t){
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x.dataset.tab===t));
+  document.querySelectorAll('section').forEach(x=>x.classList.toggle('on', x.id===t));
+  $('#prefHost').style.display='none'; render();
 }
-$('#kioskExit').onclick = () => { if (askPin('Host PIN to leave player mode')) { $('#kiosk').style.display='none'; render(); } };
-$('#setPin').onclick = () => {
-  if (S.pin && !askPin('Current host PIN')) return;
-  const v = prompt('New 4-digit host PIN'); if (!v) return;
-  if (!/^\d{4}$/.test(v)) return alert('Use exactly 4 digits.');
-  if (prompt('Type the new PIN again') !== v) return alert("PINs didn't match.");
-  S.pin = v; save(); alert('PIN saved on this device.');
-};
-$('#prefUnlock').onclick = () => { if (askPin()) { $('#prefHost').style.display='block'; renderPrefs(); } };
+$('#kioskExit').onclick = () => { if (confirm('Leave player mode?')) { $('#kiosk').style.display='none'; kioskMe=null; goTab('play'); } };
+$('#prefUnlock').onclick = () => { if (confirm("Host only: show everyone's preferences?")) { $('#prefHost').style.display='block'; renderPrefs(); } };
 $('#prefLock').onclick = () => { $('#prefHost').style.display='none'; };
 
 function render(){ renderCourts(); renderPlayers(); renderPlay(); }
