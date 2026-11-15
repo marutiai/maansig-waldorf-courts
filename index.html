@@ -388,6 +388,7 @@ function finishCourt(state, courtName){
   if (a.length===2 && b.length===2) {
     for (const [t,o] of [[a,b],[b,a]]) {
       t[0].partners[t[1].id]=(t[0].partners[t[1].id]||0)+1;
+      t[1].partners[t[0].id]=(t[1].partners[t[0].id]||0)+1;
       for (const x of t) for (const y of o) x.opponents[y.id]=(x.opponents[y.id]||0)+1;
     }
   }
