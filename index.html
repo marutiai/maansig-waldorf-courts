@@ -435,16 +435,21 @@ function roundFromIds(r){ const by = id => S.players.find(p=>p.id===id); return 
 if (S.current) S.current = roundFromIds(S.current);
 
 // Optional preloaded list (window.PRELOAD = {tag, courts, players:[{name,level,rating}]})
-if (location.hash.startsWith('#setup=')) {
+function readSetupHash(){
+  if (!location.hash.startsWith('#setup=')) return false;
   try {
     const b64 = location.hash.slice(7).replace(/-/g,'+').replace(/_/g,'/');
     window.PRELOAD = JSON.parse(decodeURIComponent(escape(atob(b64))));
   } catch(e) { alert('That setup link looks broken.'); }
   history.replaceState(null, '', location.pathname);
+  return true;
 }
+readSetupHash();
+// If the app is already open, a new setup link only changes the #hash: reload to apply it
+window.addEventListener('hashchange', () => { if (location.hash.startsWith('#setup=')) location.reload(); });
 if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
   const P = window.PRELOAD;
-  const fresh = !S.players.length || confirm(`Load the player list for ${P.tag}? This replaces the current players.`);
+  const fresh = !S.players.length || confirm(`Load the player list for ${P.tag}? This replaces the current players and courts.`);
   if (fresh) {
     S.players = []; S.nextId = 1; S.roundNo = 0; S.current = null;
     for (const p of P.players) S.players.push(newPlayer(p, S.nextId++));
@@ -452,7 +457,8 @@ if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
     S.live = {};
     if (P.sync !== undefined) S.sync = P.sync;
   }
-  S.preloadTag = P.tag; save();
+  if (fresh) S.preloadTag = P.tag;
+  save();
 }
 
 const $ = s => document.querySelector(s);
