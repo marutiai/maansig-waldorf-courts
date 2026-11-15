@@ -52,6 +52,7 @@
   <h1>🏸 Waldorf Courts</h1>
   <nav>
     <button data-tab="setup" class="on">Setup</button>
+    <button data-tab="host">Host 🔒</button>
     <button data-tab="players">Players</button>
     <button data-tab="play">Play</button>
   </nav>
@@ -81,8 +82,13 @@
     </div>
   </section>
 
-  <!-- PLAYERS -->
-  <section id="players">
+  <!-- HOST (organisers only) -->
+  <section id="host">
+    <div class="card">
+      <h2>Host PIN</h2>
+      <p class="muted" id="pinLine"></p>
+      <button class="btn sec" id="setPin">Set / change host PIN</button>
+    </div>
     <div class="card">
       <h2>Add players</h2>
       <label>Paste one per line: <b>Name, Level</b> (Imp / Int)</label>
@@ -90,24 +96,33 @@
       <button class="btn" id="addPlayers">Add players</button>
     </div>
     <div class="card">
-      <h2>Today's players <span class="muted" id="countLine"></span></h2>
+      <h2>Players &amp; ratings <span class="muted" id="countLine"></span></h2>
       <table id="playerTable"></table>
-      <p class="muted">Tap a name to mark them away/back. ★ = skill within their level (used to keep games balanced and to fill the top court).</p>
+      <p class="muted">Tap a name to mark them away/back. ★ = skill within their level (keeps games balanced, fills the top court). Only visible here.</p>
     </div>
     <div class="card">
-      <h2>Private preferences 🔒</h2>
-      <p class="muted">Only on this device, never shown on the Play screen. 👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible).</p>
-      <button class="btn" id="kioskOpen">📱 Player mode: let players add their own (private)</button>
-      <button class="btn sec" id="prefUnlock">🔒 Show / edit preferences (host only)</button>
-      <div id="prefHost" style="display:none">
+      <h2>Everyone's preferences</h2>
+      <p class="muted">👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible). 🔒 = the player locked it with their own PIN.</p>
       <label>Whose preferences?</label>
       <select id="prefWho"></select>
       <table id="prefTable"></table>
       <label>Or paste many at once (one player per line): <b>Name: +likes, -rather not</b></label>
       <textarea id="prefPaste" placeholder="Sam Lee: +Jo, +Alex Smith, -Max"></textarea>
       <button class="btn sec" id="prefImport">Import preferences</button>
-      <button class="btn sec" id="prefLock">🔒 Hide preferences</button>
-      </div>
+      <button class="btn sec" id="prefExport">Copy all preferences (to save)</button>
+    </div>
+  </section>
+
+  <!-- PLAYERS (safe to show players) -->
+  <section id="players">
+    <div class="card">
+      <h2>Your preferences</h2>
+      <p class="muted">Tell us privately who you enjoy playing with. Only the organisers see it.</p>
+      <button class="btn" id="kioskOpen">📱 Add my preferences</button>
+    </div>
+    <div class="card">
+      <h2>Today's players</h2>
+      <div id="simpleList"></div>
     </div>
   </section>
 
@@ -119,6 +134,13 @@
     </div>
     <div id="courtsView"></div>
     <div id="queueView" class="card" style="display:none"></div>
+    <div class="card">
+      <h2>Late arrival</h2>
+      <div class="row"><input id="lateName" placeholder="Name" style="flex:1.6"><select id="lateLevel"><option>Improvers</option><option>Intermediate</option></select></div>
+      <button class="btn sec" id="lateAdd">+ Add to the queue</button>
+      <p class="muted">Late arrivals start level with the people who've played least, so they get on soon without jumping everyone. Tap a name in "Up next" to mark them as left (or back).</p>
+      <div id="leftList" class="muted"></div>
+    </div>
   </section>
 </main>
 
@@ -383,12 +405,18 @@ if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () => {
-  $('#prefHost').style.display='none';
-  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x===b));
-  document.querySelectorAll('section').forEach(s=>s.classList.toggle('on', s.id===b.dataset.tab));
+let hostOpen = false;
+function goTab(t){
+  if (t==='host' && !hostOpen) {
+    if (S.pin) { const v = prompt('Host PIN'); if (v===null) return; if (v!==S.pin) return alert('Wrong PIN.'); }
+    hostOpen = true;
+  }
+  if (t!=='host') hostOpen = false;          // leaving Host locks it again
+  document.querySelectorAll('nav button[data-tab]').forEach(x=>x.classList.toggle('on', x.dataset.tab===t));
+  document.querySelectorAll('section').forEach(x=>x.classList.toggle('on', x.id===t));
   render();
-});
+}
+document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () => goTab(b.dataset.tab));
 
 function renderCourts(){
   $('#courtList').innerHTML = S.courts.map((c,i)=>`
@@ -444,7 +472,7 @@ $('#prefImport').onclick = () => {
   for (const raw of $('#prefPaste').value.split('\n')) {
     const line = raw.trim(); if (!line) continue;
     const i = line.indexOf(':'); const me = i > 0 ? find(line.slice(0, i)) : null;
-    if (!me || me.pin) { bad.push(line); continue; }
+    if (!me) { bad.push(line); continue; }
     me.prefer = me.prefer || []; me.avoid = me.avoid || [];
     for (const tok of line.slice(i + 1).split(',')) {
       const t = tok.trim(); if (!t) continue;
@@ -465,24 +493,20 @@ function renderPrefs(){
   if (!ps.some(p=>p.id===prefWho)) prefWho = ps.length ? ps[0].id : null;
   $('#prefWho').innerHTML = ps.map(p=>{
     const n=(p.prefer||[]).length+(p.avoid||[]).length;
-    return `<option value="${p.id}" ${p.id===prefWho?'selected':''}>${esc(p.name)} (${p.level==='Improvers'?'Imp':'Int'})${p.pin?' · 🔒 private':n?' · '+n+' set':''}</option>`;}).join('');
+    return `<option value="${p.id}" ${p.id===prefWho?'selected':''}>${esc(p.name)} (${p.level==='Improvers'?'Imp':'Int'})${n?' · '+n+' set':''}${p.pin?' 🔒':''}</option>`;}).join('');
   $('#prefWho').onchange = e => { prefWho = +e.target.value; renderPrefs(); };
   const me = S.players.find(p=>p.id===prefWho);
   if (!me) { $('#prefTable').innerHTML=''; return; }
   me.prefer = me.prefer||[]; me.avoid = me.avoid||[];
-  if (me.pin) {
-    $('#prefTable').innerHTML = `<tr><td>🔒 ${esc(me.name)} locked their choices with a personal PIN. They still count in the pairings.</td></tr>
-      <tr><td><button class="btn small sec" id="prefReset">Clear their choices and PIN (if they forgot it)</button></td></tr>`;
-    $('#prefReset').onclick = () => { if (confirm('Clear '+me.name+"'s choices and PIN? You won't see what they were.")) { me.prefer=[]; me.avoid=[]; delete me.pin; save(); renderPrefs(); } };
-    return;
-  }
+  const lockNote = me.pin ? `<tr><td colspan="2">🔒 ${esc(me.name)} locked these with their own PIN. <button class="btn small sec" id="prefReset">Clear PIN</button></td></tr>` : '';
   const others = ps.filter(p=>p.id!==me.id && p.level===me.level);
-  $('#prefTable').innerHTML = others.map(o=>{
+  $('#prefTable').innerHTML = lockNote + others.map(o=>{
     const st = me.prefer.includes(o.id)?'up':me.avoid.includes(o.id)?'down':'';
     return `<tr><td>${esc(o.name)}</td><td class="r">
       <button class="btn small ${st==='up'?'':'sec'} pref" data-id="${o.id}" data-v="up">👍</button>
       <button class="btn small ${st==='down'?'':'sec'} pref" data-id="${o.id}" data-v="down">👎</button></td></tr>`;}).join('')
     || '<tr><td class="muted">No one else at this level.</td></tr>';
+  if ($('#prefReset')) $('#prefReset').onclick = () => { if (confirm('Remove '+me.name+"'s personal PIN? Their choices stay.")) { delete me.pin; save(); renderPrefs(); } };
   document.querySelectorAll('.pref').forEach(b=>b.onclick=()=>{
     const id=+b.dataset.id, v=b.dataset.v;
     const was = v==='up' ? me.prefer.includes(id) : me.avoid.includes(id);
@@ -517,9 +541,13 @@ function renderPlay(){
   document.querySelectorAll('.finish').forEach(e=>e.onclick=()=>{ finishCourt(S, e.dataset.c); save(); renderPlay(); });
   document.querySelectorAll('.reroll').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=null; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); save(); renderPlay(); });
   document.querySelectorAll('.startc').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); if(!S.live[e.dataset.c]) alert('Need 4 free players at this level.'); save(); renderPlay(); });
-  const qs = LEVELS.map(L=>{ if(!S.courts.some(c=>c.level===L)) return ''; const q=queueFor(S,L); return q.length?`<p><span class="pill ${L}">${L}</span> ${q.map((p,i)=>`${i+1}. ${esc(p.name)} <span class="tag">(${p.games})</span>`).join(' · ')}</p>`:''; }).join('');
+  const qs = LEVELS.map(L=>{ if(!S.courts.some(c=>c.level===L)) return ''; const q=queueFor(S,L); return q.length?`<p><span class="pill ${L}">${L}</span> ${q.map((p,i)=>`<span class="qn" data-id="${p.id}">${i+1}. ${esc(p.name)}</span> <span class="tag">(${p.games})</span>`).join(' · ')}</p>`:''; }).join('');
   $('#queueView').style.display = qs ? 'block' : 'none';
-  $('#queueView').innerHTML = `<h2>Up next</h2>${qs}<p class="muted">Order for the next free spot. (Games played in brackets.)</p>`;
+  $('#queueView').innerHTML = `<h2>Up next</h2>${qs}<p class="muted">Order for the next free spot. (Games played in brackets.) Tap a name if they've left.</p>`;
+  document.querySelectorAll('.qn').forEach(e=>e.onclick=()=>{ const p=by(+e.dataset.id); if(confirm(p.name+' has left?')){ p.away=true; save(); renderPlay(); } });
+  const gone = S.players.filter(p=>p.away);
+  $('#leftList').innerHTML = gone.length ? 'Away / left (tap to bring back): ' + gone.map(p=>`<a href="#" class="back" data-id="${p.id}">${esc(p.name)}</a>`).join(', ') : '';
+  document.querySelectorAll('.back').forEach(e=>e.onclick=(ev)=>{ ev.preventDefault(); $('#lateName').value=by(+e.dataset.id).name; $('#lateLevel').value=by(+e.dataset.id).level; addLate(); });
 }
 
 $('#fillCourts').onclick = () => {
@@ -535,7 +563,7 @@ let kioskMe = null, kioskPick = {};
 function renderKiosk(){
   const body = $('#kioskBody');
   if (!kioskMe) {
-    body.innerHTML = `<div class="card"><h2>Tap your name</h2><p class="muted">Your choices are private. Nobody else can see them, and they disappear from this screen when you finish.</p>
+    body.innerHTML = `<div class="card"><h2>Tap your name</h2><p class="muted">Your choices are private: other players can't see them, and they disappear from this screen when you finish. Only the organisers can see them.</p>
       ${LEVELS.map(L=>{const ps=S.players.filter(p=>p.level===L&&!p.away).sort((a,b)=>a.name.localeCompare(b.name)); return ps.length?`<p><span class="pill ${L}">${L}</span></p>`+ps.map(p=>`<button class="btn sec kme" data-id="${p.id}" style="margin-top:6px">${esc(p.name)}${p.pin?' 🔒':''}</button>`).join(''):'';}).join('')}</div>`;
     body.querySelectorAll('.kme').forEach(b=>b.onclick=()=>{
       const p = S.players.find(x=>x.id===+b.dataset.id);
@@ -551,7 +579,7 @@ function renderKiosk(){
     <table>${others.map(o=>`<tr><td>${esc(o.name)}</td><td class="r">
       <button class="btn small ${kioskPick[o.id]==='up'?'':'sec'} kp" data-id="${o.id}" data-v="up">👍</button>
       <button class="btn small ${kioskPick[o.id]==='down'?'':'sec'} kp" data-id="${o.id}" data-v="down">👎</button></td></tr>`).join('')}</table>
-    <label style="margin-top:14px"><input type="checkbox" id="kLock" style="width:auto" ${me.pin?'checked':''}> 🔒 Lock my choices with my own 4-digit PIN (optional). Then nobody, not even the host, can see them.</label>
+    <label style="margin-top:14px"><input type="checkbox" id="kLock" style="width:auto" ${me.pin?'checked':''}> 🔒 Lock my choices with my own 4-digit PIN (optional), so other players can't open or change them. Only the organisers can see them.</label>
     <button class="btn" id="kSave">Save &amp; hide</button><button class="btn sec" id="kCancel">Cancel</button></div>`;
   body.querySelectorAll('.kp').forEach(b=>b.onclick=()=>{ const id=+b.dataset.id; kioskPick[id] = kioskPick[id]===b.dataset.v ? undefined : b.dataset.v; renderKiosk(); });
   $('#kSave').onclick = () => {
@@ -569,17 +597,42 @@ function renderKiosk(){
   };
   $('#kCancel').onclick = () => { kioskMe=null; kioskPick={}; renderKiosk(); };
 }
-$('#kioskOpen').onclick = () => { $('#prefHost').style.display='none'; kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
-function goTab(t){
-  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x.dataset.tab===t));
-  document.querySelectorAll('section').forEach(x=>x.classList.toggle('on', x.id===t));
-  $('#prefHost').style.display='none'; render();
-}
+$('#kioskOpen').onclick = () => { kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
 $('#kioskExit').onclick = () => { if (confirm('Leave player mode?')) { $('#kiosk').style.display='none'; kioskMe=null; goTab('play'); } };
-$('#prefUnlock').onclick = () => { if (confirm("Host only: show everyone's preferences?")) { $('#prefHost').style.display='block'; renderPrefs(); } };
-$('#prefLock').onclick = () => { $('#prefHost').style.display='none'; };
+$('#setPin').onclick = () => {
+  const v = prompt(S.pin ? 'New 4-digit host PIN (leave empty to remove the PIN)' : 'Choose a 4-digit host PIN');
+  if (v===null) return;
+  if (v==='') { delete S.pin; save(); render(); return alert('Host PIN removed.'); }
+  if (!/^\d{4}$/.test(v)) return alert('Use exactly 4 digits.');
+  if (prompt('Type it again') !== v) return alert("PINs didn't match.");
+  S.pin = v; save(); render(); alert('Host PIN saved on this device.');
+};
+$('#prefExport').onclick = () => {
+  const name = id => (S.players.find(p=>p.id===id)||{}).name;
+  const txt = S.players.filter(p=>(p.prefer||[]).length||(p.avoid||[]).length)
+    .map(p=> p.name+': '+[...(p.prefer||[]).map(i=>'+'+name(i)), ...(p.avoid||[]).map(i=>'-'+name(i))].filter(x=>!/undefined/.test(x)).join(', ')).join('\n');
+  if (!txt) return alert('No preferences yet.');
+  (navigator.clipboard ? navigator.clipboard.writeText(txt).then(()=>alert('Copied. Paste it to MarutiAI to save.')) : Promise.reject()).catch(()=>prompt('Copy this:', txt));
+};
+function addLate(){
+  const name = $('#lateName').value.trim(); const level = $('#lateLevel').value;
+  if (!name) return alert('Type a name first.');
+  let p = S.players.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  const peers = S.players.filter(x=>x.level===level && !x.away && x!==p);
+  const minG = peers.length ? Math.min(...peers.map(x=>x.games)) : 0;
+  if (p) { p.away=false; p.level=level; }
+  else { p = newPlayer({name, level, rating:3}, S.nextId++); S.players.push(p); }
+  p.games = Math.max(p.games, minG); p.streak = 0; p.satStreak = 0;
+  $('#lateName').value=''; save(); renderPlay();
+}
+$('#lateAdd').onclick = addLate;
 
-function render(){ renderCourts(); renderPlayers(); renderPlay(); }
+function renderSimple(){
+  const here = S.players.filter(p=>!p.away);
+  $('#simpleList').innerHTML = LEVELS.map(L=>{const ps=here.filter(p=>p.level===L).map(p=>esc(p.name)).sort(); return ps.length?`<p><span class="pill ${L}">${L}</span> ${ps.join(', ')}</p>`:'';}).join('') || '<p class="muted">No players yet.</p>';
+  $('#pinLine').textContent = S.pin ? 'A host PIN is set on this device. The Host tab asks for it.' : 'No PIN yet. Anyone can open the Host tab. Set a PIN to protect ratings and preferences.';
+}
+function render(){ renderCourts(); renderPlayers(); renderPlay(); renderSimple(); }
 render();
 </script>
 </body>
