@@ -322,10 +322,41 @@ function freePool(state, level, except){
   const busy = onCourtIds(state, except);
   return state.players.filter(p=>p.level===level && !p.away && !busy.has(p.id));
 }
+// Pick 4 for one court in fair-queue mode, mixing groups for variety.
+// Fair: anyone with fewer games than the 4th-fewest MUST play. Among the rest of the
+// tie, choose the four who have played together least. Back-to-back games and sit-outs
+// are allowed when that is what it takes to get new combinations.
+function chooseFour(pool, rand){
+  const r = rand || Math.random;
+  const sorted = pool.slice().sort((p,q)=> p.games-q.games || q.satStreak-p.satStreak || r()-0.5);
+  const g4 = sorted[3].games;
+  const must = sorted.filter(p=>p.games < g4);
+  let opt = sorted.filter(p=>p.games === g4);
+  if (opt.length > 10) opt = opt.slice(0,10);
+  const need = 4 - must.length;
+  const together = (p,q) => (p.partners[q.id]||0) + (p.opponents[q.id]||0);
+  const clash = (p,q) => dislikes(p,q) || dislikes(q,p);
+  let best = null;
+  const combos = (arr, k, start=0, cur=[]) => {
+    if (cur.length===k) { score(cur); return; }
+    for (let i=start; i<arr.length; i++) { cur.push(arr[i]); combos(arr,k,i+1,cur); cur.pop(); }
+  };
+  const score = (extra) => {
+    const four = must.concat(extra);
+    let s = 0;
+    for (let i=0;i<4;i++) for (let j=i+1;j<4;j++) { s += together(four[i],four[j])*4; if (clash(four[i],four[j])) s += 100; }
+    for (const p of four) { s += p.streak*3; s -= p.satStreak*3; if (p.streak>=2) s += 20; if (p.satStreak>=2) s -= 20; }
+    s += r()*0.5;
+    if (!best || s < best.s) best = { s, four };
+  };
+  combos(opt, need);
+  return { play: best.four, sit: pool.filter(p=>!best.four.includes(p)) };
+}
+
 function pickForCourt(state, court, rand){
   const pool = freePool(state, court.level, court.name);
   if (pool.length < 4) return null;
-  let pick = choosePlayers(pool, 4, state.mode, rand);
+  let pick = state.mode === 'two' ? choosePlayers(pool, 4, state.mode, rand) : chooseFour(pool, rand);
   if (court.top) {   // top court: strongest of those due to play next
     const due = choosePlayers(pool, Math.min(pool.length, 8), state.mode, rand).play;
     const four = due.slice().sort((p,q)=>q.rating-p.rating).slice(0,4);
