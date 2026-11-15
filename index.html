@@ -110,7 +110,8 @@
       <label>Or paste many at once (one player per line): <b>Name: +likes, -rather not</b></label>
       <textarea id="prefPaste" placeholder="Sam Lee: +Jo, +Alex Smith, -Max"></textarea>
       <button class="btn sec" id="prefImport">Import preferences</button>
-      <button class="btn sec" id="prefExport">Copy all preferences (to save)</button>
+      <button class="btn" id="prefDownload">⬇️ Download all preferences (spreadsheet file)</button>
+      <button class="btn sec" id="prefExport">Copy all preferences (to paste to MarutiAI)</button>
     </div>
   </section>
 
@@ -230,7 +231,7 @@ function splitCost(a,b){
   let opp = 0, avoidOpp = 0;
   for (const p of a) for (const q of b) { opp += (p.opponents[q.id]||0); avoidOpp += oppPref(p,q); }
   const bal = Math.abs((a[0].rating+a[1].rating) - (b[0].rating+b[1].rating));
-  return rep*10 + opp*2 + bal*3 + pairPref(a[0],a[1]) + pairPref(b[0],b[1]) + avoidOpp;
+  return rep*8 + opp*6 + bal*3 + pairPref(a[0],a[1]) + pairPref(b[0],b[1]) + avoidOpp;
 }
 
 // Fill courts of one level with chosen players.
@@ -677,6 +678,18 @@ $('#prefExport').onclick = () => {
     .map(p=> p.name+': '+[...(p.prefer||[]).map(i=>'+'+name(i)), ...(p.avoid||[]).map(i=>'-'+name(i))].filter(x=>!/undefined/.test(x)).join(', ')).join('\n');
   if (!txt) return alert('No preferences yet.');
   (navigator.clipboard ? navigator.clipboard.writeText(txt).then(()=>alert('Copied. Paste it to MarutiAI to save.')) : Promise.reject()).catch(()=>prompt('Copy this:', txt));
+};
+$('#prefDownload').onclick = () => {
+  const name = id => (S.players.find(p=>p.id===id)||{}).name || '';
+  const q = v => '"' + String(v).replace(/"/g,'""') + '"';
+  const rows = [['Player','Level','Likes playing with','Would rather not partner','Locked by player','Games played today']];
+  for (const p of S.players.slice().sort((a,b)=>a.level.localeCompare(b.level)||a.name.localeCompare(b.name)))
+    rows.push([p.name, p.level, (p.prefer||[]).map(name).join('; '), (p.avoid||[]).map(name).join('; '), p.pin?'Yes':'', p.games]);
+  const csv = rows.map(r=>r.map(q).join(',')).join('\n');
+  const d = new Date(); const tag = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'waldorf-preferences-'+tag+'.csv';
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 };
 function addLate(){
   const name = $('#lateName').value.trim(); const level = $('#lateLevel').value;
