@@ -1,3 +1,385 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Waldorf Courts</title></head>
-<body><h1>Waldorf Courts</h1><p>Coming soon.</p></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Waldorf Courts">
+<meta name="theme-color" content="#1c4d5c">
+<title>Waldorf Courts</title>
+<style>
+  :root { --teal:#1c4d5c; --teal-l:#d9ebee; --imp:#d6f0f8; --int:#ffe1bf; --bg:#f6f8f9; --ink:#1d2327; --mut:#6b7780; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--teal); color:#fff; padding:14px 16px calc(14px + env(safe-area-inset-top)); padding-top:calc(14px + env(safe-area-inset-top)); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:5; }
+  header h1 { font-size:18px; margin:0; }
+  nav { display:flex; gap:6px; }
+  nav button { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.5); border-radius:16px; padding:6px 12px; font-size:14px; }
+  nav button.on { background:#fff; color:var(--teal); }
+  main { padding:14px; max-width:720px; margin:0 auto; }
+  section { display:none; } section.on { display:block; }
+  .card { background:#fff; border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,.07); }
+  h2 { font-size:16px; margin:0 0 10px; color:var(--teal); }
+  label { font-size:14px; color:var(--mut); display:block; margin:8px 0 4px; }
+  input, select, textarea { font:inherit; font-size:16px; padding:8px 10px; border:1px solid #cfd7dc; border-radius:8px; width:100%; background:#fff; }
+  textarea { min-height:120px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > * { flex:1; }
+  .btn { background:var(--teal); color:#fff; border:none; border-radius:10px; padding:12px 14px; font-size:16px; font-weight:600; width:100%; margin-top:10px; }
+  .btn.sec { background:#fff; color:var(--teal); border:1.5px solid var(--teal); }
+  .btn.small { width:auto; padding:6px 10px; font-size:14px; margin:0; }
+  .muted { color:var(--mut); font-size:13px; }
+  .pill { display:inline-block; font-size:12px; font-weight:600; border-radius:10px; padding:2px 8px; }
+  .Improvers { background:var(--imp); color:#0b5a73; } .Intermediate { background:var(--int); color:#8a4b00; }
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  td { padding:7px 4px; border-bottom:1px solid #eef1f3; vertical-align:middle; }
+  td.r { text-align:right; white-space:nowrap; }
+  .away td:first-child { color:#aab3b9; text-decoration:line-through; }
+  .court { border-left:6px solid var(--teal); }
+  .court.Improvers { border-left-color:#5bb6d3; background:#fff; } .court.Intermediate { border-left-color:#f0a24a; background:#fff; }
+  .match { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; font-size:18px; font-weight:600; margin-top:6px; }
+  .match .vs { color:var(--mut); font-size:14px; font-weight:400; }
+  .match .t { background:var(--bg); border-radius:8px; padding:10px; text-align:center; line-height:1.4; }
+  .name.sel { outline:2px solid #e0533d; border-radius:4px; }
+  .sitout { font-size:15px; }
+  .tag { font-size:12px; color:var(--mut); }
+  .stars button { border:none; background:none; font-size:18px; padding:0 1px; color:#ccd3d8; }
+  .stars button.on { color:#f0a24a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏸 Waldorf Courts</h1>
+  <nav>
+    <button data-tab="setup" class="on">Setup</button>
+    <button data-tab="players">Players</button>
+    <button data-tab="play">Play</button>
+  </nav>
+</header>
+<main>
+  <!-- SETUP -->
+  <section id="setup" class="on">
+    <div class="card">
+      <h2>Courts</h2>
+      <div id="courtList"></div>
+      <button class="btn sec" id="addCourt">+ Add court</button>
+      <p class="muted">Each court has one level. Improvers and Intermediate are never mixed. "Top court" puts the higher-rated players of that level together.</p>
+    </div>
+    <div class="card">
+      <h2>Rotation</h2>
+      <label>How people sit out</label>
+      <select id="mode">
+        <option value="each">Fair queue: fewest games play next</option>
+        <option value="two">Play 2 games, then sit out</option>
+      </select>
+      <p class="muted">8 on a court = 4 play, 4 sit each game.</p>
+    </div>
+    <div class="card">
+      <h2>Session</h2>
+      <button class="btn sec" id="newSession">Start a new session (keep players, reset games)</button>
+      <button class="btn sec" id="clearAll">Clear everything</button>
+    </div>
+  </section>
+
+  <!-- PLAYERS -->
+  <section id="players">
+    <div class="card">
+      <h2>Add players</h2>
+      <label>Paste one per line: <b>Name, Level</b> (Imp / Int)</label>
+      <textarea id="paste" placeholder="Alex Smith, Int&#10;Sam Lee, Imp&#10;Jo, Imp, 4"></textarea>
+      <button class="btn" id="addPlayers">Add players</button>
+    </div>
+    <div class="card">
+      <h2>Today's players <span class="muted" id="countLine"></span></h2>
+      <table id="playerTable"></table>
+      <p class="muted">Tap a name to mark them away/back. ★ = skill within their level (used to keep games balanced and to fill the top court).</p>
+    </div>
+  </section>
+
+  <!-- PLAY -->
+  <section id="play">
+    <div id="roundHead" class="card">
+      <div class="row"><h2 id="roundTitle" style="margin:0">No round yet</h2></div>
+      <button class="btn" id="genRound">Make next round</button>
+      <div class="row" id="roundActions" style="display:none">
+        <button class="btn sec" id="reshuffle">Reshuffle</button>
+        <button class="btn" id="confirmRound">Start this round ✓</button>
+      </div>
+      <p class="muted" id="swapHint" style="display:none">To swap two players, tap one name, then the other.</p>
+    </div>
+    <div id="courtsView"></div>
+    <div id="sitView" class="card" style="display:none"></div>
+  </section>
+</main>
+
+<script>
+/*ENGINE START*/
+const LEVELS = ['Improvers','Intermediate'];
+
+function normLevel(s){
+  s = (s||'').trim().toLowerCase();
+  if (s.startsWith('imp') || s==='b' || s.startsWith('beg')) return 'Improvers';
+  if (s.startsWith('int') || s.startsWith('adv')) return 'Intermediate';
+  return null;
+}
+
+function parsePlayers(text){
+  const out = []; const bad = [];
+  for (const raw of text.split(/\n/)) {
+    const line = raw.trim(); if (!line) continue;
+    const parts = line.split(/\s*[,|\t;-]\s*/).filter(Boolean);
+    if (parts.length < 2) { bad.push(line); continue; }
+    const level = normLevel(parts[1]);
+    if (!level) { bad.push(line); continue; }
+    const rating = Math.min(5, Math.max(1, parseInt(parts[2]) || 3));
+    out.push({ name: parts[0], level, rating });
+  }
+  return { players: out, bad };
+}
+
+function newPlayer(p, id){
+  return { id, name:p.name, level:p.level, rating:p.rating||3, away:false,
+           games:0, streak:0, satStreak:0, lastRound:-1, partners:{}, opponents:{} };
+}
+
+function resetStats(players){
+  for (const p of players) { p.games=0; p.streak=0; p.satStreak=0; p.lastRound=-1; p.partners={}; p.opponents={}; }
+}
+
+// Pick who plays this round for one level. Returns {play:[], sit:[]}
+function choosePlayers(pool, slots, mode, rand){
+  const r = rand || Math.random;
+  const scored = pool.map(p => {
+    let pri = 0;
+    if (mode === 'two') {
+      if (p.streak === 1) pri -= 1000;        // played 1 in a row: keep them on
+      else if (p.streak >= 2) pri += 1000;    // played 2 in a row: sit out
+    } else {
+      if (p.streak >= 1) pri += 100;          // just played: sit if possible
+    }
+    pri += p.games * 10;                      // fewest games first
+    pri -= p.satStreak * 5;                   // longest wait breaks ties
+    pri += r();                               // random tie-break
+    return { p, pri };
+  }).sort((a,b) => a.pri - b.pri);
+  const n = Math.min(slots, Math.floor(pool.length/4)*4);
+  return { play: scored.slice(0,n).map(x=>x.p), sit: scored.slice(n).map(x=>x.p) };
+}
+
+// Best 2v2 split of four players. Returns {a:[p,p], b:[p,p], cost}
+function bestSplit(four){
+  const [w,x,y,z] = four;
+  const opts = [[[w,x],[y,z]], [[w,y],[x,z]], [[w,z],[x,y]]];
+  let best = null;
+  for (const [a,b] of opts) {
+    const c = splitCost(a,b);
+    if (!best || c < best.cost) best = { a, b, cost:c };
+  }
+  return best;
+}
+function splitCost(a,b){
+  const rep = (a[0].partners[a[1].id]||0) + (b[0].partners[b[1].id]||0);
+  let opp = 0; for (const p of a) for (const q of b) opp += (p.opponents[q.id]||0);
+  const bal = Math.abs((a[0].rating+a[1].rating) - (b[0].rating+b[1].rating));
+  return rep*10 + opp*2 + bal*3;
+}
+
+// Fill courts of one level with chosen players.
+function buildMatches(players, courts, rand){
+  const r = rand || Math.random;
+  const nCourts = Math.min(courts.length, Math.floor(players.length/4));
+  const use = courts.slice(0, nCourts);
+  let pool = players.slice();
+  const groups = use.map(()=>[]);
+  // top courts take the highest-rated players first
+  const topIdx = use.map((c,i)=>c.top?i:-1).filter(i=>i>=0);
+  if (topIdx.length) {
+    pool.sort((p,q)=> q.rating - p.rating || r()-0.5);
+    for (const i of topIdx) groups[i] = pool.splice(0,4);
+  }
+  // shuffle the rest into the other courts
+  pool.sort(()=> r()-0.5);
+  for (let i=0;i<use.length;i++) if (!groups[i].length) groups[i] = pool.splice(0,4);
+  // improve by swapping between non-top courts
+  const free = use.map((c,i)=>c.top?-1:i).filter(i=>i>=0);
+  const cost = g => bestSplit(g).cost;
+  for (let it=0; it<300 && free.length>1; it++) {
+    const i = free[Math.floor(r()*free.length)], j = free[Math.floor(r()*free.length)];
+    if (i===j) continue;
+    const a = Math.floor(r()*4), b = Math.floor(r()*4);
+    const gi = groups[i].slice(), gj = groups[j].slice();
+    [gi[a], gj[b]] = [gj[b], gi[a]];
+    if (cost(gi)+cost(gj) < cost(groups[i])+cost(groups[j])) { groups[i]=gi; groups[j]=gj; }
+  }
+  return use.map((c,i)=> ({ court:c.name, level:c.level, top:!!c.top, ...bestSplit(groups[i]) }));
+}
+
+function makeRound(state, rand){
+  const matches = []; const sit = [];
+  for (const L of LEVELS) {
+    const courts = state.courts.filter(c=>c.level===L);
+    const pool = state.players.filter(p=>p.level===L && !p.away);
+    if (!courts.length) { sit.push(...pool); continue; }
+    const pick = choosePlayers(pool, courts.length*4, state.mode, rand);
+    matches.push(...buildMatches(pick.play, courts, rand));
+    sit.push(...pick.sit);
+  }
+  // keep court order as set up
+  const order = state.courts.map(c=>c.name);
+  matches.sort((m,n)=> order.indexOf(m.court) - order.indexOf(n.court));
+  return { matches, sit: sit.map(p=>p.id) };
+}
+
+function applyRound(state, round){
+  const n = state.roundNo + 1;
+  const playing = new Set();
+  for (const m of round.matches) {
+    for (const [t,o] of [[m.a,m.b],[m.b,m.a]]) {
+      const [p,q] = t;
+      p.partners[q.id]=(p.partners[q.id]||0)+1; q.partners[p.id]=(q.partners[p.id]||0)+1;
+      for (const x of t) for (const y of o) x.opponents[y.id]=(x.opponents[y.id]||0)+1;
+      for (const x of t) playing.add(x.id);
+    }
+  }
+  for (const p of state.players) {
+    if (p.away) continue;
+    if (playing.has(p.id)) { p.games++; p.streak++; p.satStreak=0; p.lastRound=n; }
+    else { p.streak=0; p.satStreak++; }
+  }
+  state.roundNo = n;
+}
+/*ENGINE END*/
+
+// ---------- UI ----------
+const KEY = 'waldorf-courts-v1';
+let S = load();
+let pending = null, selected = null;
+
+function load(){
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.players) return s; } catch(e){}
+  return { courts:[{name:'Court 1', level:'Improvers'},{name:'Court 2', level:'Intermediate'}], mode:'each', players:[], roundNo:0, nextId:1, current:null };
+}
+function save(){
+  // players are stored by reference inside rounds; store ids only
+  const plain = JSON.parse(JSON.stringify({...S, current: S.current ? roundToIds(S.current) : null}));
+  localStorage.setItem(KEY, JSON.stringify(plain));
+}
+function roundToIds(r){ return { matches: r.matches.map(m=>({...m, a:m.a.map(p=>p.id), b:m.b.map(p=>p.id)})), sit:r.sit }; }
+function roundFromIds(r){ const by = id => S.players.find(p=>p.id===id); return r && { matches: r.matches.map(m=>({...m, a:m.a.map(by), b:m.b.map(by)})), sit:r.sit }; }
+if (S.current) S.current = roundFromIds(S.current);
+
+// Optional preloaded list (window.PRELOAD = {tag, courts, players:[{name,level,rating}]})
+if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
+  const P = window.PRELOAD;
+  const fresh = !S.players.length || confirm(`Load the player list for ${P.tag}? This replaces the current players.`);
+  if (fresh) {
+    S.players = []; S.nextId = 1; S.roundNo = 0; S.current = null;
+    for (const p of P.players) S.players.push(newPlayer(p, S.nextId++));
+    if (P.courts) S.courts = P.courts;
+  }
+  S.preloadTag = P.tag; save();
+}
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x===b));
+  document.querySelectorAll('section').forEach(s=>s.classList.toggle('on', s.id===b.dataset.tab));
+  render();
+});
+
+function renderCourts(){
+  $('#courtList').innerHTML = S.courts.map((c,i)=>`
+    <div class="row" style="margin-bottom:8px">
+      <input value="${esc(c.name)}" data-i="${i}" class="cname" style="flex:1.2">
+      <select data-i="${i}" class="clevel">${LEVELS.map(L=>`<option ${L===c.level?'selected':''}>${L}</option>`).join('')}</select>
+      <label style="flex:.7;margin:0"><input type="checkbox" data-i="${i}" class="ctop" ${c.top?'checked':''} style="width:auto"> Top</label>
+      <button class="btn small sec cdel" data-i="${i}" style="flex:0">✕</button>
+    </div>`).join('');
+  document.querySelectorAll('.cname').forEach(e=>e.onchange=()=>{S.courts[e.dataset.i].name=e.value; save();});
+  document.querySelectorAll('.clevel').forEach(e=>e.onchange=()=>{S.courts[e.dataset.i].level=e.value; save();});
+  document.querySelectorAll('.ctop').forEach(e=>e.onchange=()=>{S.courts[e.dataset.i].top=e.checked; save();});
+  document.querySelectorAll('.cdel').forEach(e=>e.onclick=()=>{S.courts.splice(e.dataset.i,1); save(); renderCourts();});
+  $('#mode').value = S.mode;
+}
+$('#addCourt').onclick = () => { S.courts.push({name:'Court '+(S.courts.length+1), level:'Intermediate'}); save(); renderCourts(); };
+$('#mode').onchange = e => { S.mode = e.target.value; save(); };
+$('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; pending=null; save(); render(); };
+$('#clearAll').onclick = () => { if (!confirm('Remove all players and courts?')) return; localStorage.removeItem(KEY); S = load(); pending=null; render(); };
+
+$('#addPlayers').onclick = () => {
+  const { players, bad } = parsePlayers($('#paste').value);
+  for (const p of players) {
+    if (S.players.some(x=>x.name.toLowerCase()===p.name.toLowerCase())) continue;
+    S.players.push(newPlayer(p, S.nextId++));
+  }
+  $('#paste').value = bad.join('\n');
+  save(); render();
+  if (bad.length) alert('Could not read '+bad.length+' line(s). They are left in the box. Use: Name, Imp  or  Name, Int');
+};
+
+function renderPlayers(){
+  const ps = S.players.slice().sort((a,b)=> a.level.localeCompare(b.level) || a.name.localeCompare(b.name));
+  const here = S.players.filter(p=>!p.away);
+  $('#countLine').textContent = LEVELS.map(L=>`${L}: ${here.filter(p=>p.level===L).length}`).join(' · ');
+  $('#playerTable').innerHTML = ps.map(p=>`
+    <tr class="${p.away?'away':''}">
+      <td class="pname" data-id="${p.id}">${esc(p.name)}<br><span class="pill ${p.level}">${p.level}</span> <span class="tag">${p.games} games</span></td>
+      <td class="r stars">${[1,2,3,4,5].map(n=>`<button data-id="${p.id}" data-n="${n}" class="${n<=p.rating?'on':''}">★</button>`).join('')}</td>
+      <td class="r"><button class="btn small sec plev" data-id="${p.id}">⇄</button> <button class="btn small sec pdel" data-id="${p.id}">✕</button></td>
+    </tr>`).join('') || '<tr><td class="muted">No players yet.</td></tr>';
+  const by = id => S.players.find(p=>p.id==id);
+  document.querySelectorAll('.pname').forEach(e=>e.onclick=()=>{ const p=by(e.dataset.id); p.away=!p.away; save(); renderPlayers(); });
+  document.querySelectorAll('.stars button').forEach(e=>e.onclick=()=>{ by(e.dataset.id).rating=+e.dataset.n; save(); renderPlayers(); });
+  document.querySelectorAll('.plev').forEach(e=>e.onclick=()=>{ const p=by(e.dataset.id); p.level = p.level==='Improvers'?'Intermediate':'Improvers'; save(); renderPlayers(); });
+  document.querySelectorAll('.pdel').forEach(e=>e.onclick=()=>{ if(!confirm('Remove '+by(e.dataset.id).name+'?'))return; S.players=S.players.filter(p=>p.id!=e.dataset.id); save(); renderPlayers(); });
+}
+
+function renderPlay(){
+  const r = pending || S.current;
+  $('#roundTitle').textContent = pending ? `Round ${S.roundNo+1} (preview)` : (S.current ? `Round ${S.roundNo} — playing` : 'No round yet');
+  $('#genRound').style.display = pending ? 'none' : 'block';
+  $('#roundActions').style.display = pending ? 'flex' : 'none';
+  $('#swapHint').style.display = pending ? 'block' : 'none';
+  if (!r) { $('#courtsView').innerHTML = '<div class="card muted">Set up courts and players, then tap "Make next round".</div>'; $('#sitView').style.display='none'; return; }
+  const nm = p => `<span class="name ${selected===p.id?'sel':''}" data-id="${p.id}">${esc(p.name)}</span>`;
+  $('#courtsView').innerHTML = r.matches.map(m=>`
+    <div class="card court ${m.level}">
+      <div class="row"><b>${esc(m.court)}</b><span style="text-align:right"><span class="pill ${m.level}">${m.level}${m.top?' · Top':''}</span></span></div>
+      <div class="match"><div class="t">${nm(m.a[0])}<br>${nm(m.a[1])}</div><div class="vs">vs</div><div class="t">${nm(m.b[0])}<br>${nm(m.b[1])}</div></div>
+    </div>`).join('');
+  const sitters = r.sit.map(id=>S.players.find(p=>p.id===id)).filter(Boolean);
+  $('#sitView').style.display = sitters.length ? 'block' : 'none';
+  $('#sitView').innerHTML = `<h2>Sitting out</h2><div class="sitout">${LEVELS.map(L=>{const s=sitters.filter(p=>p.level===L); return s.length?`<span class="pill ${L}">${L}</span> ${s.map(nm).join(', ')}`:''}).filter(Boolean).join('<br>')}</div>`;
+  if (pending) document.querySelectorAll('.name').forEach(e=>e.onclick=()=>pickSwap(+e.dataset.id));
+}
+
+function pickSwap(id){
+  if (selected===null) { selected=id; return renderPlay(); }
+  if (selected===id) { selected=null; return renderPlay(); }
+  const a = S.players.find(p=>p.id===selected), b = S.players.find(p=>p.id===id);
+  if (a.level!==b.level) { alert("Can't swap Improvers and Intermediate."); selected=null; return renderPlay(); }
+  const slots = [];
+  pending.matches.forEach(m=>['a','b'].forEach(t=>m[t].forEach((p,i)=>slots.push({m,t,i,p}))));
+  const sa = slots.find(s=>s.p.id===a.id), sb = slots.find(s=>s.p.id===b.id);
+  if (sa && sb) { sa.m[sa.t][sa.i]=b; sb.m[sb.t][sb.i]=a; }
+  else if (sa && !sb) { sa.m[sa.t][sa.i]=b; pending.sit = pending.sit.map(x=>x===b.id?a.id:x); }
+  else if (!sa && sb) { sb.m[sb.t][sb.i]=a; pending.sit = pending.sit.map(x=>x===a.id?b.id:x); }
+  selected=null; renderPlay();
+}
+
+$('#genRound').onclick = () => {
+  if (!S.courts.length) return alert('Add a court in Setup first.');
+  pending = makeRound(S);
+  if (!pending.matches.length) { pending=null; return alert('Not enough players at any court level (need 4 per court).'); }
+  renderPlay();
+};
+$('#reshuffle').onclick = () => { pending = makeRound(S); selected=null; renderPlay(); };
+$('#confirmRound').onclick = () => { applyRound(S, pending); S.current = pending; pending=null; selected=null; save(); renderPlay(); };
+
+function render(){ renderCourts(); renderPlayers(); renderPlay(); }
+render();
+</script>
+</body>
+</html>
