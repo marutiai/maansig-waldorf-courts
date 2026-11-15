@@ -52,6 +52,7 @@
   <h1>🏸 Waldorf Courts</h1>
   <nav>
     <button data-tab="setup" class="on">Setup</button>
+    <button data-tab="host">Host 🔒</button>
     <button data-tab="players">Players</button>
     <button data-tab="play">Play</button>
   </nav>
@@ -73,6 +74,7 @@
         <option value="two">Play 2 games, then sit out</option>
       </select>
       <p class="muted">8 on a court = 4 play, 4 sit each game.</p>
+      <label style="margin-top:10px"><input type="checkbox" id="sync" style="width:auto"> <b>Courts change together</b> (best mixing): when a court finishes it waits for the other courts of its level, then everyone is reshuffled across all of them.</label>
     </div>
     <div class="card">
       <h2>Session</h2>
@@ -81,8 +83,13 @@
     </div>
   </section>
 
-  <!-- PLAYERS -->
-  <section id="players">
+  <!-- HOST (organisers only) -->
+  <section id="host">
+    <div class="card">
+      <h2>Host PIN</h2>
+      <p class="muted" id="pinLine"></p>
+      <button class="btn sec" id="setPin">Set / change host PIN</button>
+    </div>
     <div class="card">
       <h2>Add players</h2>
       <label>Paste one per line: <b>Name, Level</b> (Imp / Int)</label>
@@ -90,24 +97,34 @@
       <button class="btn" id="addPlayers">Add players</button>
     </div>
     <div class="card">
-      <h2>Today's players <span class="muted" id="countLine"></span></h2>
+      <h2>Players &amp; ratings <span class="muted" id="countLine"></span></h2>
       <table id="playerTable"></table>
-      <p class="muted">Tap a name to mark them away/back. ★ = skill within their level (used to keep games balanced and to fill the top court).</p>
+      <p class="muted">Tap a name to mark them away/back. ★ = skill within their level (keeps games balanced, fills the top court). Only visible here.</p>
     </div>
     <div class="card">
-      <h2>Private preferences 🔒</h2>
-      <p class="muted">Only on this device, never shown on the Play screen. 👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible).</p>
-      <button class="btn" id="kioskOpen">📱 Player mode: let players add their own (private)</button>
-      <button class="btn sec" id="prefUnlock">🔒 Show / edit preferences (host only)</button>
-      <div id="prefHost" style="display:none">
+      <h2>Everyone's preferences</h2>
+      <p class="muted">👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible). 🔒 = the player locked it with their own PIN.</p>
       <label>Whose preferences?</label>
       <select id="prefWho"></select>
       <table id="prefTable"></table>
       <label>Or paste many at once (one player per line): <b>Name: +likes, -rather not</b></label>
       <textarea id="prefPaste" placeholder="Sam Lee: +Jo, +Alex Smith, -Max"></textarea>
       <button class="btn sec" id="prefImport">Import preferences</button>
-      <button class="btn sec" id="prefLock">🔒 Hide preferences</button>
-      </div>
+      <button class="btn" id="prefDownload">⬇️ Download all preferences (spreadsheet file)</button>
+      <button class="btn sec" id="prefExport">Copy all preferences (to paste to MarutiAI)</button>
+    </div>
+  </section>
+
+  <!-- PLAYERS (safe to show players) -->
+  <section id="players">
+    <div class="card">
+      <h2>Your preferences</h2>
+      <p class="muted">Tell us privately who you enjoy playing with. Only the organisers see it.</p>
+      <button class="btn" id="kioskOpen">📱 Add my preferences</button>
+    </div>
+    <div class="card">
+      <h2>Today's players</h2>
+      <div id="simpleList"></div>
     </div>
   </section>
 
@@ -119,6 +136,13 @@
     </div>
     <div id="courtsView"></div>
     <div id="queueView" class="card" style="display:none"></div>
+    <div class="card">
+      <h2>Late arrival</h2>
+      <div class="row"><input id="lateName" placeholder="Name" style="flex:1.6"><select id="lateLevel"><option>Improvers</option><option>Intermediate</option></select></div>
+      <button class="btn sec" id="lateAdd">+ Add to the queue</button>
+      <p class="muted">Late arrivals start level with the people who've played least, so they get on soon without jumping everyone. Tap a name in "Up next" to mark them as left (or back).</p>
+      <div id="leftList" class="muted"></div>
+    </div>
   </section>
 </main>
 
@@ -207,7 +231,7 @@ function splitCost(a,b){
   let opp = 0, avoidOpp = 0;
   for (const p of a) for (const q of b) { opp += (p.opponents[q.id]||0); avoidOpp += oppPref(p,q); }
   const bal = Math.abs((a[0].rating+a[1].rating) - (b[0].rating+b[1].rating));
-  return rep*10 + opp*2 + bal*3 + pairPref(a[0],a[1]) + pairPref(b[0],b[1]) + avoidOpp;
+  return rep*8 + opp*6 + bal*3 + pairPref(a[0],a[1]) + pairPref(b[0],b[1]) + avoidOpp;
 }
 
 // Fill courts of one level with chosen players.
@@ -300,10 +324,50 @@ function freePool(state, level, except){
   const busy = onCourtIds(state, except);
   return state.players.filter(p=>p.level===level && !p.away && !busy.has(p.id));
 }
+// Pick 4 for one court in fair-queue mode, mixing groups for variety.
+// Fair: anyone with fewer games than the 4th-fewest MUST play. Among the rest of the
+// tie, choose the four who have played together least. Back-to-back games and sit-outs
+// are allowed when that is what it takes to get new combinations.
+function chooseFour(pool, rand){
+  // Variety first. Fairness is kept loose: anyone within one game of the lowest count can be
+  // picked, so someone may sit an extra game now and play an extra one later. Hard limits:
+  // nobody sits 3 in a row or plays 3 in a row if it can be avoided, and the totals never
+  // drift more than 1 apart while picking.
+  const r = rand || Math.random;
+  const minG = Math.min(...pool.map(p=>p.games));
+  const must = pool.filter(p=>p.games===minG && p.satStreak>=2);           // waited 2 in a row: on now
+  let opt = pool.filter(p=>!must.includes(p) && p.games<=minG+1 && p.streak<2);
+  if (must.length + opt.length < 4) opt = pool.filter(p=>!must.includes(p));
+  opt.sort((p,q)=> p.games-q.games || q.satStreak-p.satStreak || r()-0.5);
+  if (opt.length > 11) opt = opt.slice(0,11);
+  const four0 = must.slice(0,4);
+  const need = 4 - four0.length;
+  const together = (p,q) => (p.partners[q.id]||0) + (p.opponents[q.id]||0);
+  const clash = (p,q) => dislikes(p,q) || dislikes(q,p);
+  let best = null;
+  const score = (extra) => {
+    const four = four0.concat(extra);
+    let s = 0;
+    for (let i=0;i<4;i++) for (let j=i+1;j<4;j++) {
+      s += together(four[i],four[j])*4; if (clash(four[i],four[j])) s += 200;
+      if ((four[i].lastMates||[]).includes(four[j].id)) s += 15;   // were on the same court last game: mix it up
+    }
+    for (const p of four) { s += (p.games-minG)*5; s += p.streak*2; s -= p.satStreak*3; }
+    s += r()*0.5;
+    if (!best || s < best.s) best = { s, four };
+  };
+  const combos = (arr, k, start=0, cur=[]) => {
+    if (cur.length===k) { score(cur.slice()); return; }
+    for (let i=start; i<arr.length; i++) { cur.push(arr[i]); combos(arr,k,i+1,cur); cur.pop(); }
+  };
+  combos(opt, need);
+  return { play: best.four, sit: pool.filter(p=>!best.four.includes(p)) };
+}
+
 function pickForCourt(state, court, rand){
   const pool = freePool(state, court.level, court.name);
   if (pool.length < 4) return null;
-  let pick = choosePlayers(pool, 4, state.mode, rand);
+  let pick = state.mode === 'two' ? choosePlayers(pool, 4, state.mode, rand) : chooseFour(pool, rand);
   if (court.top) {   // top court: strongest of those due to play next
     const due = choosePlayers(pool, Math.min(pool.length, 8), state.mode, rand).play;
     const four = due.slice().sort((p,q)=>q.rating-p.rating).slice(0,4);
@@ -322,13 +386,14 @@ function pickForCourt(state, court, rand){
   const m = bestSplit(pick.play);
   return { a: m.a.map(p=>p.id), b: m.b.map(p=>p.id) };
 }
-function finishCourt(state, courtName){
+function finishCourt(state, courtName, refill=true){
   const m = state.live[courtName]; if (!m) return;
   const by = id => state.players.find(p=>p.id===id);
   const a = m.a.map(by).filter(Boolean), b = m.b.map(by).filter(Boolean);
   if (a.length===2 && b.length===2) {
     for (const [t,o] of [[a,b],[b,a]]) {
       t[0].partners[t[1].id]=(t[0].partners[t[1].id]||0)+1;
+      t[1].partners[t[0].id]=(t[1].partners[t[0].id]||0)+1;
       for (const x of t) for (const y of o) x.opponents[y.id]=(x.opponents[y.id]||0)+1;
     }
   }
@@ -340,8 +405,9 @@ function finishCourt(state, courtName){
     if (played.has(p.id)) { p.games++; p.streak++; p.satStreak=0; }
     else if (court && p.level===court.level && !busy.has(p.id)) { p.streak=0; p.satStreak++; }
   }
+  for (const id of played) { const p = by(id); if (p) p.lastMates = [...played].filter(x=>x!==id); }
   state.live[courtName] = null;
-  if (court) state.live[courtName] = pickForCourt(state, court);
+  if (court && refill) state.live[courtName] = pickForCourt(state, court);
 }
 function queueFor(state, level){
   const pool = freePool(state, level);
@@ -369,6 +435,13 @@ function roundFromIds(r){ const by = id => S.players.find(p=>p.id===id); return 
 if (S.current) S.current = roundFromIds(S.current);
 
 // Optional preloaded list (window.PRELOAD = {tag, courts, players:[{name,level,rating}]})
+if (location.hash.startsWith('#setup=')) {
+  try {
+    const b64 = location.hash.slice(7).replace(/-/g,'+').replace(/_/g,'/');
+    window.PRELOAD = JSON.parse(decodeURIComponent(escape(atob(b64))));
+  } catch(e) { alert('That setup link looks broken.'); }
+  history.replaceState(null, '', location.pathname);
+}
 if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
   const P = window.PRELOAD;
   const fresh = !S.players.length || confirm(`Load the player list for ${P.tag}? This replaces the current players.`);
@@ -376,6 +449,8 @@ if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
     S.players = []; S.nextId = 1; S.roundNo = 0; S.current = null;
     for (const p of P.players) S.players.push(newPlayer(p, S.nextId++));
     if (P.courts) S.courts = P.courts;
+    S.live = {};
+    if (P.sync !== undefined) S.sync = P.sync;
   }
   S.preloadTag = P.tag; save();
 }
@@ -383,12 +458,18 @@ if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () => {
-  $('#prefHost').style.display='none';
-  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x===b));
-  document.querySelectorAll('section').forEach(s=>s.classList.toggle('on', s.id===b.dataset.tab));
+let hostOpen = false;
+function goTab(t){
+  if (t==='host' && !hostOpen) {
+    if (S.pin) { const v = prompt('Host PIN'); if (v===null) return; if (v!==S.pin) return alert('Wrong PIN.'); }
+    hostOpen = true;
+  }
+  if (t!=='host') hostOpen = false;          // leaving Host locks it again
+  document.querySelectorAll('nav button[data-tab]').forEach(x=>x.classList.toggle('on', x.dataset.tab===t));
+  document.querySelectorAll('section').forEach(x=>x.classList.toggle('on', x.id===t));
   render();
-});
+}
+document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () => goTab(b.dataset.tab));
 
 function renderCourts(){
   $('#courtList').innerHTML = S.courts.map((c,i)=>`
@@ -402,10 +483,11 @@ function renderCourts(){
   document.querySelectorAll('.clevel').forEach(e=>e.onchange=()=>{S.courts[e.dataset.i].level=e.value; save();});
   document.querySelectorAll('.ctop').forEach(e=>e.onchange=()=>{S.courts[e.dataset.i].top=e.checked; save();});
   document.querySelectorAll('.cdel').forEach(e=>e.onclick=()=>{S.courts.splice(e.dataset.i,1); save(); renderCourts();});
-  $('#mode').value = S.mode;
+  $('#mode').value = S.mode; $('#sync').checked = !!S.sync;
 }
 $('#addCourt').onclick = () => { S.courts.push({name:'Court '+(S.courts.length+1), level:'Intermediate'}); save(); renderCourts(); };
 $('#mode').onchange = e => { S.mode = e.target.value; save(); };
+$('#sync').onchange = e => { S.sync = e.target.checked; save(); };
 $('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; pending=null; save(); render(); };
 $('#clearAll').onclick = () => { if (!confirm('Remove all players and courts?')) return; localStorage.removeItem(KEY); S = load(); pending=null; render(); };
 
@@ -444,7 +526,7 @@ $('#prefImport').onclick = () => {
   for (const raw of $('#prefPaste').value.split('\n')) {
     const line = raw.trim(); if (!line) continue;
     const i = line.indexOf(':'); const me = i > 0 ? find(line.slice(0, i)) : null;
-    if (!me || me.pin) { bad.push(line); continue; }
+    if (!me) { bad.push(line); continue; }
     me.prefer = me.prefer || []; me.avoid = me.avoid || [];
     for (const tok of line.slice(i + 1).split(',')) {
       const t = tok.trim(); if (!t) continue;
@@ -465,24 +547,20 @@ function renderPrefs(){
   if (!ps.some(p=>p.id===prefWho)) prefWho = ps.length ? ps[0].id : null;
   $('#prefWho').innerHTML = ps.map(p=>{
     const n=(p.prefer||[]).length+(p.avoid||[]).length;
-    return `<option value="${p.id}" ${p.id===prefWho?'selected':''}>${esc(p.name)} (${p.level==='Improvers'?'Imp':'Int'})${p.pin?' · 🔒 private':n?' · '+n+' set':''}</option>`;}).join('');
+    return `<option value="${p.id}" ${p.id===prefWho?'selected':''}>${esc(p.name)} (${p.level==='Improvers'?'Imp':'Int'})${n?' · '+n+' set':''}${p.pin?' 🔒':''}</option>`;}).join('');
   $('#prefWho').onchange = e => { prefWho = +e.target.value; renderPrefs(); };
   const me = S.players.find(p=>p.id===prefWho);
   if (!me) { $('#prefTable').innerHTML=''; return; }
   me.prefer = me.prefer||[]; me.avoid = me.avoid||[];
-  if (me.pin) {
-    $('#prefTable').innerHTML = `<tr><td>🔒 ${esc(me.name)} locked their choices with a personal PIN. They still count in the pairings.</td></tr>
-      <tr><td><button class="btn small sec" id="prefReset">Clear their choices and PIN (if they forgot it)</button></td></tr>`;
-    $('#prefReset').onclick = () => { if (confirm('Clear '+me.name+"'s choices and PIN? You won't see what they were.")) { me.prefer=[]; me.avoid=[]; delete me.pin; save(); renderPrefs(); } };
-    return;
-  }
+  const lockNote = me.pin ? `<tr><td colspan="2">🔒 ${esc(me.name)} locked these with their own PIN. <button class="btn small sec" id="prefReset">Clear PIN</button></td></tr>` : '';
   const others = ps.filter(p=>p.id!==me.id && p.level===me.level);
-  $('#prefTable').innerHTML = others.map(o=>{
+  $('#prefTable').innerHTML = lockNote + others.map(o=>{
     const st = me.prefer.includes(o.id)?'up':me.avoid.includes(o.id)?'down':'';
     return `<tr><td>${esc(o.name)}</td><td class="r">
       <button class="btn small ${st==='up'?'':'sec'} pref" data-id="${o.id}" data-v="up">👍</button>
       <button class="btn small ${st==='down'?'':'sec'} pref" data-id="${o.id}" data-v="down">👎</button></td></tr>`;}).join('')
     || '<tr><td class="muted">No one else at this level.</td></tr>';
+  if ($('#prefReset')) $('#prefReset').onclick = () => { if (confirm('Remove '+me.name+"'s personal PIN? Their choices stay.")) { delete me.pin; save(); renderPrefs(); } };
   document.querySelectorAll('.pref').forEach(b=>b.onclick=()=>{
     const id=+b.dataset.id, v=b.dataset.v;
     const was = v==='up' ? me.prefer.includes(id) : me.avoid.includes(id);
@@ -506,7 +584,9 @@ function renderPlay(){
       <div class="row"><b>${esc(c.name)}</b><span style="text-align:right"><span class="pill ${c.level}">${c.level}${c.top?' · Top':''}</span></span></div>
       ${m ? `<div class="match"><div class="t">${slot(m.a[0],'a',0)}${slot(m.a[1],'a',1)}</div><div class="vs">vs</div><div class="t">${slot(m.b[0],'b',0)}${slot(m.b[1],'b',1)}</div></div>
         <div class="row"><button class="btn sec reroll" data-c="${esc(c.name)}">Reshuffle</button><button class="btn finish" data-c="${esc(c.name)}">Game finished ✓</button></div>`
-          : `<p class="muted">Empty. Not enough free players at this level, or not started.</p><button class="btn sec startc" data-c="${esc(c.name)}">Start this court</button>`}
+          : (S.sync && (S.waiting||{})[c.name])
+            ? `<p class="muted">✓ Finished. Waiting for the other ${c.level} court(s) to finish, then everyone is reshuffled.</p><button class="btn sec startc" data-c="${esc(c.name)}">Don't wait, start now</button>`
+            : `<p class="muted">Empty. Not enough free players at this level, or not started.</p><button class="btn sec startc" data-c="${esc(c.name)}">Start this court</button>`}
     </div>`;}).join('') || '<div class="card muted">Add courts in Setup first.</div>';
   document.querySelectorAll('.slot').forEach(e=>e.onchange=()=>{
     const m = S.live[e.dataset.c]; const newId = +e.value; const oldId = m[e.dataset.t][+e.dataset.i];
@@ -514,12 +594,25 @@ function renderPlay(){
     m[e.dataset.t][+e.dataset.i] = newId; save(); renderPlay();
   });
   const court = n => S.courts.find(c=>c.name===n);
-  document.querySelectorAll('.finish').forEach(e=>e.onclick=()=>{ finishCourt(S, e.dataset.c); save(); renderPlay(); });
+  document.querySelectorAll('.finish').forEach(e=>e.onclick=()=>{
+    const cn = e.dataset.c, lvl = court(cn).level;
+    if (!S.sync) { finishCourt(S, cn); save(); renderPlay(); return; }
+    finishCourt(S, cn, false); S.waiting = S.waiting || {}; S.waiting[cn] = true;
+    const same = S.courts.filter(c=>c.level===lvl);
+    if (same.every(c=>!S.live[c.name])) {            // all courts of this level done: reshuffle together
+      for (const c of same) { S.waiting[c.name] = false; S.live[c.name] = pickForCourt(S, c); }
+    }
+    save(); renderPlay();
+  });
   document.querySelectorAll('.reroll').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=null; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); save(); renderPlay(); });
-  document.querySelectorAll('.startc').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); if(!S.live[e.dataset.c]) alert('Need 4 free players at this level.'); save(); renderPlay(); });
-  const qs = LEVELS.map(L=>{ if(!S.courts.some(c=>c.level===L)) return ''; const q=queueFor(S,L); return q.length?`<p><span class="pill ${L}">${L}</span> ${q.map((p,i)=>`${i+1}. ${esc(p.name)} <span class="tag">(${p.games})</span>`).join(' · ')}</p>`:''; }).join('');
+  document.querySelectorAll('.startc').forEach(e=>e.onclick=()=>{ if (S.waiting) S.waiting[e.dataset.c]=false; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); if(!S.live[e.dataset.c]) alert('Need 4 free players at this level.'); save(); renderPlay(); });
+  const qs = LEVELS.map(L=>{ if(!S.courts.some(c=>c.level===L)) return ''; const q=queueFor(S,L); return q.length?`<p><span class="pill ${L}">${L}</span> ${q.map((p,i)=>`<span class="qn" data-id="${p.id}">${i+1}. ${esc(p.name)}</span> <span class="tag">(${p.games})</span>`).join(' · ')}</p>`:''; }).join('');
   $('#queueView').style.display = qs ? 'block' : 'none';
-  $('#queueView').innerHTML = `<h2>Up next</h2>${qs}<p class="muted">Order for the next free spot. (Games played in brackets.)</p>`;
+  $('#queueView').innerHTML = `<h2>Up next</h2>${qs}<p class="muted">Order for the next free spot. (Games played in brackets.) Tap a name if they've left.</p>`;
+  document.querySelectorAll('.qn').forEach(e=>e.onclick=()=>{ const p=by(+e.dataset.id); if(confirm(p.name+' has left?')){ p.away=true; save(); renderPlay(); } });
+  const gone = S.players.filter(p=>p.away);
+  $('#leftList').innerHTML = gone.length ? 'Away / left (tap to bring back): ' + gone.map(p=>`<a href="#" class="back" data-id="${p.id}">${esc(p.name)}</a>`).join(', ') : '';
+  document.querySelectorAll('.back').forEach(e=>e.onclick=(ev)=>{ ev.preventDefault(); $('#lateName').value=by(+e.dataset.id).name; $('#lateLevel').value=by(+e.dataset.id).level; addLate(); });
 }
 
 $('#fillCourts').onclick = () => {
@@ -535,7 +628,7 @@ let kioskMe = null, kioskPick = {};
 function renderKiosk(){
   const body = $('#kioskBody');
   if (!kioskMe) {
-    body.innerHTML = `<div class="card"><h2>Tap your name</h2><p class="muted">Your choices are private. Nobody else can see them, and they disappear from this screen when you finish.</p>
+    body.innerHTML = `<div class="card"><h2>Tap your name</h2><p class="muted">Your choices are private: other players can't see them, and they disappear from this screen when you finish. Only the organisers can see them.</p>
       ${LEVELS.map(L=>{const ps=S.players.filter(p=>p.level===L&&!p.away).sort((a,b)=>a.name.localeCompare(b.name)); return ps.length?`<p><span class="pill ${L}">${L}</span></p>`+ps.map(p=>`<button class="btn sec kme" data-id="${p.id}" style="margin-top:6px">${esc(p.name)}${p.pin?' 🔒':''}</button>`).join(''):'';}).join('')}</div>`;
     body.querySelectorAll('.kme').forEach(b=>b.onclick=()=>{
       const p = S.players.find(x=>x.id===+b.dataset.id);
@@ -551,7 +644,7 @@ function renderKiosk(){
     <table>${others.map(o=>`<tr><td>${esc(o.name)}</td><td class="r">
       <button class="btn small ${kioskPick[o.id]==='up'?'':'sec'} kp" data-id="${o.id}" data-v="up">👍</button>
       <button class="btn small ${kioskPick[o.id]==='down'?'':'sec'} kp" data-id="${o.id}" data-v="down">👎</button></td></tr>`).join('')}</table>
-    <label style="margin-top:14px"><input type="checkbox" id="kLock" style="width:auto" ${me.pin?'checked':''}> 🔒 Lock my choices with my own 4-digit PIN (optional). Then nobody, not even the host, can see them.</label>
+    <label style="margin-top:14px"><input type="checkbox" id="kLock" style="width:auto" ${me.pin?'checked':''}> 🔒 Lock my choices with my own 4-digit PIN (optional), so other players can't open or change them. Only the organisers can see them.</label>
     <button class="btn" id="kSave">Save &amp; hide</button><button class="btn sec" id="kCancel">Cancel</button></div>`;
   body.querySelectorAll('.kp').forEach(b=>b.onclick=()=>{ const id=+b.dataset.id; kioskPick[id] = kioskPick[id]===b.dataset.v ? undefined : b.dataset.v; renderKiosk(); });
   $('#kSave').onclick = () => {
@@ -569,17 +662,54 @@ function renderKiosk(){
   };
   $('#kCancel').onclick = () => { kioskMe=null; kioskPick={}; renderKiosk(); };
 }
-$('#kioskOpen').onclick = () => { $('#prefHost').style.display='none'; kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
-function goTab(t){
-  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x.dataset.tab===t));
-  document.querySelectorAll('section').forEach(x=>x.classList.toggle('on', x.id===t));
-  $('#prefHost').style.display='none'; render();
-}
+$('#kioskOpen').onclick = () => { kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
 $('#kioskExit').onclick = () => { if (confirm('Leave player mode?')) { $('#kiosk').style.display='none'; kioskMe=null; goTab('play'); } };
-$('#prefUnlock').onclick = () => { if (confirm("Host only: show everyone's preferences?")) { $('#prefHost').style.display='block'; renderPrefs(); } };
-$('#prefLock').onclick = () => { $('#prefHost').style.display='none'; };
+$('#setPin').onclick = () => {
+  const v = prompt(S.pin ? 'New 4-digit host PIN (leave empty to remove the PIN)' : 'Choose a 4-digit host PIN');
+  if (v===null) return;
+  if (v==='') { delete S.pin; save(); render(); return alert('Host PIN removed.'); }
+  if (!/^\d{4}$/.test(v)) return alert('Use exactly 4 digits.');
+  if (prompt('Type it again') !== v) return alert("PINs didn't match.");
+  S.pin = v; save(); render(); alert('Host PIN saved on this device.');
+};
+$('#prefExport').onclick = () => {
+  const name = id => (S.players.find(p=>p.id===id)||{}).name;
+  const txt = S.players.filter(p=>(p.prefer||[]).length||(p.avoid||[]).length)
+    .map(p=> p.name+': '+[...(p.prefer||[]).map(i=>'+'+name(i)), ...(p.avoid||[]).map(i=>'-'+name(i))].filter(x=>!/undefined/.test(x)).join(', ')).join('\n');
+  if (!txt) return alert('No preferences yet.');
+  (navigator.clipboard ? navigator.clipboard.writeText(txt).then(()=>alert('Copied. Paste it to MarutiAI to save.')) : Promise.reject()).catch(()=>prompt('Copy this:', txt));
+};
+$('#prefDownload').onclick = () => {
+  const name = id => (S.players.find(p=>p.id===id)||{}).name || '';
+  const q = v => '"' + String(v).replace(/"/g,'""') + '"';
+  const rows = [['Player','Level','Likes playing with','Would rather not partner','Locked by player','Games played today']];
+  for (const p of S.players.slice().sort((a,b)=>a.level.localeCompare(b.level)||a.name.localeCompare(b.name)))
+    rows.push([p.name, p.level, (p.prefer||[]).map(name).join('; '), (p.avoid||[]).map(name).join('; '), p.pin?'Yes':'', p.games]);
+  const csv = rows.map(r=>r.map(q).join(',')).join('\n');
+  const d = new Date(); const tag = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'waldorf-preferences-'+tag+'.csv';
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+};
+function addLate(){
+  const name = $('#lateName').value.trim(); const level = $('#lateLevel').value;
+  if (!name) return alert('Type a name first.');
+  let p = S.players.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  const peers = S.players.filter(x=>x.level===level && !x.away && x!==p);
+  const minG = peers.length ? Math.min(...peers.map(x=>x.games)) : 0;
+  if (p) { p.away=false; p.level=level; }
+  else { p = newPlayer({name, level, rating:3}, S.nextId++); S.players.push(p); }
+  p.games = Math.max(p.games, minG); p.streak = 0; p.satStreak = 0;
+  $('#lateName').value=''; save(); renderPlay();
+}
+$('#lateAdd').onclick = addLate;
 
-function render(){ renderCourts(); renderPlayers(); renderPlay(); }
+function renderSimple(){
+  const here = S.players.filter(p=>!p.away);
+  $('#simpleList').innerHTML = LEVELS.map(L=>{const ps=here.filter(p=>p.level===L).map(p=>esc(p.name)).sort(); return ps.length?`<p><span class="pill ${L}">${L}</span> ${ps.join(', ')}</p>`:'';}).join('') || '<p class="muted">No players yet.</p>';
+  $('#pinLine').textContent = S.pin ? 'A host PIN is set on this device. The Host tab asks for it.' : 'No PIN yet. Anyone can open the Host tab. Set a PIN to protect ratings and preferences.';
+}
+function render(){ renderCourts(); renderPlayers(); renderPlay(); renderSimple(); }
 render();
 </script>
 </body>
