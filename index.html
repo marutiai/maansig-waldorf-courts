@@ -74,6 +74,7 @@
         <option value="two">Play 2 games, then sit out</option>
       </select>
       <p class="muted">8 on a court = 4 play, 4 sit each game.</p>
+      <label style="margin-top:10px"><input type="checkbox" id="sync" style="width:auto"> <b>Courts change together</b> (best mixing): when a court finishes it waits for the other courts of its level, then everyone is reshuffled across all of them.</label>
     </div>
     <div class="card">
       <h2>Session</h2>
@@ -346,7 +347,10 @@ function chooseFour(pool, rand){
   const score = (extra) => {
     const four = four0.concat(extra);
     let s = 0;
-    for (let i=0;i<4;i++) for (let j=i+1;j<4;j++) { s += together(four[i],four[j])*4; if (clash(four[i],four[j])) s += 200; }
+    for (let i=0;i<4;i++) for (let j=i+1;j<4;j++) {
+      s += together(four[i],four[j])*4; if (clash(four[i],four[j])) s += 200;
+      if ((four[i].lastMates||[]).includes(four[j].id)) s += 15;   // were on the same court last game: mix it up
+    }
     for (const p of four) { s += (p.games-minG)*5; s += p.streak*2; s -= p.satStreak*3; }
     s += r()*0.5;
     if (!best || s < best.s) best = { s, four };
@@ -381,7 +385,7 @@ function pickForCourt(state, court, rand){
   const m = bestSplit(pick.play);
   return { a: m.a.map(p=>p.id), b: m.b.map(p=>p.id) };
 }
-function finishCourt(state, courtName){
+function finishCourt(state, courtName, refill=true){
   const m = state.live[courtName]; if (!m) return;
   const by = id => state.players.find(p=>p.id===id);
   const a = m.a.map(by).filter(Boolean), b = m.b.map(by).filter(Boolean);
@@ -400,8 +404,9 @@ function finishCourt(state, courtName){
     if (played.has(p.id)) { p.games++; p.streak++; p.satStreak=0; }
     else if (court && p.level===court.level && !busy.has(p.id)) { p.streak=0; p.satStreak++; }
   }
+  for (const id of played) { const p = by(id); if (p) p.lastMates = [...played].filter(x=>x!==id); }
   state.live[courtName] = null;
-  if (court) state.live[courtName] = pickForCourt(state, court);
+  if (court && refill) state.live[courtName] = pickForCourt(state, court);
 }
 function queueFor(state, level){
   const pool = freePool(state, level);
@@ -444,6 +449,7 @@ if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
     for (const p of P.players) S.players.push(newPlayer(p, S.nextId++));
     if (P.courts) S.courts = P.courts;
     S.live = {};
+    if (P.sync !== undefined) S.sync = P.sync;
   }
   S.preloadTag = P.tag; save();
 }
@@ -476,10 +482,11 @@ function renderCourts(){
   document.querySelectorAll('.clevel').forEach(e=>e.onchange=()=>{S.courts[e.dataset.i].level=e.value; save();});
   document.querySelectorAll('.ctop').forEach(e=>e.onchange=()=>{S.courts[e.dataset.i].top=e.checked; save();});
   document.querySelectorAll('.cdel').forEach(e=>e.onclick=()=>{S.courts.splice(e.dataset.i,1); save(); renderCourts();});
-  $('#mode').value = S.mode;
+  $('#mode').value = S.mode; $('#sync').checked = !!S.sync;
 }
 $('#addCourt').onclick = () => { S.courts.push({name:'Court '+(S.courts.length+1), level:'Intermediate'}); save(); renderCourts(); };
 $('#mode').onchange = e => { S.mode = e.target.value; save(); };
+$('#sync').onchange = e => { S.sync = e.target.checked; save(); };
 $('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; pending=null; save(); render(); };
 $('#clearAll').onclick = () => { if (!confirm('Remove all players and courts?')) return; localStorage.removeItem(KEY); S = load(); pending=null; render(); };
 
@@ -576,7 +583,9 @@ function renderPlay(){
       <div class="row"><b>${esc(c.name)}</b><span style="text-align:right"><span class="pill ${c.level}">${c.level}${c.top?' · Top':''}</span></span></div>
       ${m ? `<div class="match"><div class="t">${slot(m.a[0],'a',0)}${slot(m.a[1],'a',1)}</div><div class="vs">vs</div><div class="t">${slot(m.b[0],'b',0)}${slot(m.b[1],'b',1)}</div></div>
         <div class="row"><button class="btn sec reroll" data-c="${esc(c.name)}">Reshuffle</button><button class="btn finish" data-c="${esc(c.name)}">Game finished ✓</button></div>`
-          : `<p class="muted">Empty. Not enough free players at this level, or not started.</p><button class="btn sec startc" data-c="${esc(c.name)}">Start this court</button>`}
+          : (S.sync && (S.waiting||{})[c.name])
+            ? `<p class="muted">✓ Finished. Waiting for the other ${c.level} court(s) to finish, then everyone is reshuffled.</p><button class="btn sec startc" data-c="${esc(c.name)}">Don't wait, start now</button>`
+            : `<p class="muted">Empty. Not enough free players at this level, or not started.</p><button class="btn sec startc" data-c="${esc(c.name)}">Start this court</button>`}
     </div>`;}).join('') || '<div class="card muted">Add courts in Setup first.</div>';
   document.querySelectorAll('.slot').forEach(e=>e.onchange=()=>{
     const m = S.live[e.dataset.c]; const newId = +e.value; const oldId = m[e.dataset.t][+e.dataset.i];
@@ -584,9 +593,18 @@ function renderPlay(){
     m[e.dataset.t][+e.dataset.i] = newId; save(); renderPlay();
   });
   const court = n => S.courts.find(c=>c.name===n);
-  document.querySelectorAll('.finish').forEach(e=>e.onclick=()=>{ finishCourt(S, e.dataset.c); save(); renderPlay(); });
+  document.querySelectorAll('.finish').forEach(e=>e.onclick=()=>{
+    const cn = e.dataset.c, lvl = court(cn).level;
+    if (!S.sync) { finishCourt(S, cn); save(); renderPlay(); return; }
+    finishCourt(S, cn, false); S.waiting = S.waiting || {}; S.waiting[cn] = true;
+    const same = S.courts.filter(c=>c.level===lvl);
+    if (same.every(c=>!S.live[c.name])) {            // all courts of this level done: reshuffle together
+      for (const c of same) { S.waiting[c.name] = false; S.live[c.name] = pickForCourt(S, c); }
+    }
+    save(); renderPlay();
+  });
   document.querySelectorAll('.reroll').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=null; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); save(); renderPlay(); });
-  document.querySelectorAll('.startc').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); if(!S.live[e.dataset.c]) alert('Need 4 free players at this level.'); save(); renderPlay(); });
+  document.querySelectorAll('.startc').forEach(e=>e.onclick=()=>{ if (S.waiting) S.waiting[e.dataset.c]=false; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); if(!S.live[e.dataset.c]) alert('Need 4 free players at this level.'); save(); renderPlay(); });
   const qs = LEVELS.map(L=>{ if(!S.courts.some(c=>c.level===L)) return ''; const q=queueFor(S,L); return q.length?`<p><span class="pill ${L}">${L}</span> ${q.map((p,i)=>`<span class="qn" data-id="${p.id}">${i+1}. ${esc(p.name)}</span> <span class="tag">(${p.games})</span>`).join(' · ')}</p>`:''; }).join('');
   $('#queueView').style.display = qs ? 'block' : 'none';
   $('#queueView').innerHTML = `<h2>Up next</h2>${qs}<p class="muted">Order for the next free spot. (Games played in brackets.) Tap a name if they've left.</p>`;
