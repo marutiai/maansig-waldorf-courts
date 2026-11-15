@@ -94,23 +94,35 @@
       <table id="playerTable"></table>
       <p class="muted">Tap a name to mark them away/back. ★ = skill within their level (used to keep games balanced and to fill the top court).</p>
     </div>
+    <div class="card">
+      <h2>Private preferences 🔒</h2>
+      <p class="muted">Only on this phone, never shown on the Play screen. 👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible).</p>
+      <label>Whose preferences?</label>
+      <select id="prefWho"></select>
+      <table id="prefTable"></table>
+      <label>Or paste many at once (one player per line): <b>Name: +likes, -rather not</b></label>
+      <textarea id="prefPaste" placeholder="Sam Lee: +Jo, +Alex Smith, -Max"></textarea>
+      <button class="btn sec" id="prefImport">Import preferences</button>
+      <button class="btn" id="kioskOpen">📱 Player mode: let players add their own (private)</button>
+    </div>
   </section>
 
   <!-- PLAY -->
   <section id="play">
-    <div id="roundHead" class="card">
-      <div class="row"><h2 id="roundTitle" style="margin:0">No round yet</h2></div>
-      <button class="btn" id="genRound">Make next round</button>
-      <div class="row" id="roundActions" style="display:none">
-        <button class="btn sec" id="reshuffle">Reshuffle</button>
-        <button class="btn" id="confirmRound">Start this round ✓</button>
-      </div>
-      <p class="muted" id="swapHint" style="display:none">To swap two players, tap one name, then the other.</p>
+    <div class="card">
+      <button class="btn" id="fillCourts">Fill empty courts</button>
+      <p class="muted">Each court runs on its own. When a game ends, tap <b>Game finished</b> on that court and the next four step on. Change anyone with the name menus.</p>
     </div>
     <div id="courtsView"></div>
-    <div id="sitView" class="card" style="display:none"></div>
+    <div id="queueView" class="card" style="display:none"></div>
   </section>
 </main>
+
+<!-- PLAYER PREFERENCE MODE (shown full-screen on the host's phone/iPad) -->
+<div id="kiosk" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:20;overflow:auto">
+  <header><h1>🏸 Who do you like playing with?</h1><nav><button id="kioskExit">Host</button></nav></header>
+  <main id="kioskBody"></main>
+</div>
 
 <script>
 /*ENGINE START*/
@@ -138,7 +150,7 @@ function parsePlayers(text){
 }
 
 function newPlayer(p, id){
-  return { id, name:p.name, level:p.level, rating:p.rating||3, away:false,
+  return { id, name:p.name, level:p.level, rating:p.rating||3, away:false, prefer:[], avoid:[],
            games:0, streak:0, satStreak:0, lastRound:-1, partners:{}, opponents:{} };
 }
 
@@ -177,11 +189,21 @@ function bestSplit(four){
   }
   return best;
 }
+// Private preferences: p.prefer / p.avoid are lists of player ids (entered by the host only)
+function likes(p,q){ return (p.prefer||[]).includes(q.id); }
+function dislikes(p,q){ return (p.avoid||[]).includes(q.id); }
+function pairPref(p,q){            // partner score: negative is good
+  if (dislikes(p,q) || dislikes(q,p)) return 1000;   // never partner someone they avoid
+  const n = (likes(p,q)?1:0) + (likes(q,p)?1:0);
+  return n===2 ? -15 : n===1 ? -8 : 0;
+}
+function oppPref(p,q){ return (dislikes(p,q)||dislikes(q,p)) ? 40 : 0; }  // try not to face them either
 function splitCost(a,b){
   const rep = (a[0].partners[a[1].id]||0) + (b[0].partners[b[1].id]||0);
-  let opp = 0; for (const p of a) for (const q of b) opp += (p.opponents[q.id]||0);
+  let opp = 0, avoidOpp = 0;
+  for (const p of a) for (const q of b) { opp += (p.opponents[q.id]||0); avoidOpp += oppPref(p,q); }
   const bal = Math.abs((a[0].rating+a[1].rating) - (b[0].rating+b[1].rating));
-  return rep*10 + opp*2 + bal*3;
+  return rep*10 + opp*2 + bal*3 + pairPref(a[0],a[1]) + pairPref(b[0],b[1]) + avoidOpp;
 }
 
 // Fill courts of one level with chosen players.
@@ -221,6 +243,21 @@ function makeRound(state, rand){
     const pool = state.players.filter(p=>p.level===L && !p.away);
     if (!courts.length) { sit.push(...pool); continue; }
     const pick = choosePlayers(pool, courts.length*4, state.mode, rand);
+    // If only one court for this level, two players who avoid each other would always meet.
+    // Swap one of them with a sitter who has played no more games (keeps it fair).
+    if (courts.length === 1) {
+      const clash = (p,q) => dislikes(p,q) || dislikes(q,p);
+      for (let tries=0; tries<4; tries++) {
+        let pair = null;
+        for (const p of pick.play) for (const q of pick.play) if (p!==q && clash(p,q)) pair = pair || [p,q];
+        if (!pair) break;
+        const out = pair[0].games >= pair[1].games ? pair[0] : pair[1];
+        const sub = pick.sit.filter(s => s.games <= out.games && !pick.play.some(p=>p!==out && clash(p,s)))
+                            .sort((a,b)=> a.games-b.games || b.satStreak-a.satStreak)[0];
+        if (!sub) break;
+        pick.play = pick.play.map(p=>p===out?sub:p); pick.sit = pick.sit.map(s=>s===sub?out:s);
+      }
+    }
     matches.push(...buildMatches(pick.play, courts, rand));
     sit.push(...pick.sit);
   }
@@ -247,6 +284,65 @@ function applyRound(state, round){
     else { p.streak=0; p.satStreak++; }
   }
   state.roundNo = n;
+}
+// ---- Rolling courts: each court finishes on its own ----
+// state.live = { [courtName]: {a:[id,id], b:[id,id]} | null }
+function onCourtIds(state, except){
+  const s = new Set();
+  for (const [c,m] of Object.entries(state.live||{})) if (m && c!==except) [...m.a,...m.b].forEach(id=>s.add(id));
+  return s;
+}
+function freePool(state, level, except){
+  const busy = onCourtIds(state, except);
+  return state.players.filter(p=>p.level===level && !p.away && !busy.has(p.id));
+}
+function pickForCourt(state, court, rand){
+  const pool = freePool(state, court.level, court.name);
+  if (pool.length < 4) return null;
+  let pick = choosePlayers(pool, 4, state.mode, rand);
+  if (court.top) {   // top court: strongest of those due to play next
+    const due = choosePlayers(pool, Math.min(pool.length, 8), state.mode, rand).play;
+    const four = due.slice().sort((p,q)=>q.rating-p.rating).slice(0,4);
+    pick = { play: four, sit: pool.filter(p=>!four.includes(p)) };
+  }
+  const clash = (p,q) => dislikes(p,q) || dislikes(q,p);
+  for (let t=0; t<4; t++) {         // keep people who avoid each other off the same court
+    let pair=null; for (const p of pick.play) for (const q of pick.play) if (p!==q && clash(p,q)) pair = pair||[p,q];
+    if (!pair) break;
+    const out = pair[0].games >= pair[1].games ? pair[0] : pair[1];
+    const sub = pick.sit.filter(s=> s.games <= out.games && !pick.play.some(p=>p!==out && clash(p,s)))
+                        .sort((a,b)=> a.games-b.games || b.satStreak-a.satStreak)[0];
+    if (!sub) break;
+    pick.play = pick.play.map(p=>p===out?sub:p); pick.sit = pick.sit.map(s=>s===sub?out:s);
+  }
+  const m = bestSplit(pick.play);
+  return { a: m.a.map(p=>p.id), b: m.b.map(p=>p.id) };
+}
+function finishCourt(state, courtName){
+  const m = state.live[courtName]; if (!m) return;
+  const by = id => state.players.find(p=>p.id===id);
+  const a = m.a.map(by).filter(Boolean), b = m.b.map(by).filter(Boolean);
+  if (a.length===2 && b.length===2) {
+    for (const [t,o] of [[a,b],[b,a]]) {
+      t[0].partners[t[1].id]=(t[0].partners[t[1].id]||0)+1;
+      for (const x of t) for (const y of o) x.opponents[y.id]=(x.opponents[y.id]||0)+1;
+    }
+  }
+  const played = new Set([...m.a,...m.b]);
+  const court = state.courts.find(c=>c.name===courtName);
+  const busy = onCourtIds(state, courtName);
+  for (const p of state.players) {
+    if (p.away) continue;
+    if (played.has(p.id)) { p.games++; p.streak++; p.satStreak=0; }
+    else if (court && p.level===court.level && !busy.has(p.id)) { p.streak=0; p.satStreak++; }
+  }
+  state.live[courtName] = null;
+  if (court) state.live[courtName] = pickForCourt(state, court);
+}
+function queueFor(state, level){
+  const pool = freePool(state, level);
+  const c = choosePlayers(pool, pool.length, state.mode, ()=>0);
+  return c.play.concat(c.sit);
 }
 /*ENGINE END*/
 
@@ -305,7 +401,7 @@ function renderCourts(){
 }
 $('#addCourt').onclick = () => { S.courts.push({name:'Court '+(S.courts.length+1), level:'Intermediate'}); save(); renderCourts(); };
 $('#mode').onchange = e => { S.mode = e.target.value; save(); };
-$('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; pending=null; save(); render(); };
+$('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; pending=null; save(); render(); };
 $('#clearAll').onclick = () => { if (!confirm('Remove all players and courts?')) return; localStorage.removeItem(KEY); S = load(); pending=null; render(); };
 
 $('#addPlayers').onclick = () => {
@@ -334,49 +430,124 @@ function renderPlayers(){
   document.querySelectorAll('.stars button').forEach(e=>e.onclick=()=>{ by(e.dataset.id).rating=+e.dataset.n; save(); renderPlayers(); });
   document.querySelectorAll('.plev').forEach(e=>e.onclick=()=>{ const p=by(e.dataset.id); p.level = p.level==='Improvers'?'Intermediate':'Improvers'; save(); renderPlayers(); });
   document.querySelectorAll('.pdel').forEach(e=>e.onclick=()=>{ if(!confirm('Remove '+by(e.dataset.id).name+'?'))return; S.players=S.players.filter(p=>p.id!=e.dataset.id); save(); renderPlayers(); });
+  renderPrefs();
+}
+
+$('#prefImport').onclick = () => {
+  const find = n => S.players.find(p => p.name.trim().toLowerCase() === n.trim().toLowerCase());
+  const bad = []; let ok = 0;
+  for (const raw of $('#prefPaste').value.split('\n')) {
+    const line = raw.trim(); if (!line) continue;
+    const i = line.indexOf(':'); const me = i > 0 ? find(line.slice(0, i)) : null;
+    if (!me) { bad.push(line); continue; }
+    me.prefer = me.prefer || []; me.avoid = me.avoid || [];
+    for (const tok of line.slice(i + 1).split(',')) {
+      const t = tok.trim(); if (!t) continue;
+      const o = find(t.replace(/^[+-]\s*/, ''));
+      if (!o || o === me || o.level !== me.level) { bad.push(me.name + ': ' + t); continue; }
+      me.prefer = me.prefer.filter(x => x !== o.id); me.avoid = me.avoid.filter(x => x !== o.id);
+      (t.startsWith('-') ? me.avoid : me.prefer).push(o.id); ok++;
+    }
+  }
+  save(); renderPrefs();
+  $('#prefPaste').value = bad.join('\n');
+  alert(`Imported ${ok} preference(s).` + (bad.length ? ` ${bad.length} not matched, left in the box.` : ''));
+};
+
+let prefWho = null;
+function renderPrefs(){
+  const ps = S.players.slice().sort((a,b)=> a.level.localeCompare(b.level) || a.name.localeCompare(b.name));
+  if (!ps.some(p=>p.id===prefWho)) prefWho = ps.length ? ps[0].id : null;
+  $('#prefWho').innerHTML = ps.map(p=>{
+    const n=(p.prefer||[]).length+(p.avoid||[]).length;
+    return `<option value="${p.id}" ${p.id===prefWho?'selected':''}>${esc(p.name)} (${p.level==='Improvers'?'Imp':'Int'})${n?' · '+n+' set':''}</option>`;}).join('');
+  $('#prefWho').onchange = e => { prefWho = +e.target.value; renderPrefs(); };
+  const me = S.players.find(p=>p.id===prefWho);
+  if (!me) { $('#prefTable').innerHTML=''; return; }
+  me.prefer = me.prefer||[]; me.avoid = me.avoid||[];
+  const others = ps.filter(p=>p.id!==me.id && p.level===me.level);
+  $('#prefTable').innerHTML = others.map(o=>{
+    const st = me.prefer.includes(o.id)?'up':me.avoid.includes(o.id)?'down':'';
+    return `<tr><td>${esc(o.name)}</td><td class="r">
+      <button class="btn small ${st==='up'?'':'sec'} pref" data-id="${o.id}" data-v="up">👍</button>
+      <button class="btn small ${st==='down'?'':'sec'} pref" data-id="${o.id}" data-v="down">👎</button></td></tr>`;}).join('')
+    || '<tr><td class="muted">No one else at this level.</td></tr>';
+  document.querySelectorAll('.pref').forEach(b=>b.onclick=()=>{
+    const id=+b.dataset.id, v=b.dataset.v;
+    const was = v==='up' ? me.prefer.includes(id) : me.avoid.includes(id);
+    me.prefer = me.prefer.filter(x=>x!==id); me.avoid = me.avoid.filter(x=>x!==id);
+    if (!was) (v==='up'?me.prefer:me.avoid).push(id);
+    save(); renderPrefs();
+  });
 }
 
 function renderPlay(){
-  const r = pending || S.current;
-  $('#roundTitle').textContent = pending ? `Round ${S.roundNo+1} (preview)` : (S.current ? `Round ${S.roundNo} — playing` : 'No round yet');
-  $('#genRound').style.display = pending ? 'none' : 'block';
-  $('#roundActions').style.display = pending ? 'flex' : 'none';
-  $('#swapHint').style.display = pending ? 'block' : 'none';
-  if (!r) { $('#courtsView').innerHTML = '<div class="card muted">Set up courts and players, then tap "Make next round".</div>'; $('#sitView').style.display='none'; return; }
-  const nm = p => `<span class="name ${selected===p.id?'sel':''}" data-id="${p.id}">${esc(p.name)}</span>`;
-  $('#courtsView').innerHTML = r.matches.map(m=>`
-    <div class="card court ${m.level}">
-      <div class="row"><b>${esc(m.court)}</b><span style="text-align:right"><span class="pill ${m.level}">${m.level}${m.top?' · Top':''}</span></span></div>
-      <div class="match"><div class="t">${nm(m.a[0])}<br>${nm(m.a[1])}</div><div class="vs">vs</div><div class="t">${nm(m.b[0])}<br>${nm(m.b[1])}</div></div>
-    </div>`).join('');
-  const sitters = r.sit.map(id=>S.players.find(p=>p.id===id)).filter(Boolean);
-  $('#sitView').style.display = sitters.length ? 'block' : 'none';
-  $('#sitView').innerHTML = `<h2>Sitting out</h2><div class="sitout">${LEVELS.map(L=>{const s=sitters.filter(p=>p.level===L); return s.length?`<span class="pill ${L}">${L}</span> ${s.map(nm).join(', ')}`:''}).filter(Boolean).join('<br>')}</div>`;
-  if (pending) document.querySelectorAll('.name').forEach(e=>e.onclick=()=>pickSwap(+e.dataset.id));
+  S.live = S.live || {};
+  const by = id => S.players.find(p=>p.id===id);
+  $('#courtsView').innerHTML = S.courts.map(c=>{
+    const m = S.live[c.name];
+    const opts = (id) => {
+      const cands = S.players.filter(p=>p.level===c.level && !p.away).sort((x,y)=>x.name.localeCompare(y.name));
+      return cands.map(p=>`<option value="${p.id}" ${p.id===id?'selected':''}>${esc(p.name)}</option>`).join('');
+    };
+    const slot = (id,t,i) => `<select class="slot" data-c="${esc(c.name)}" data-t="${t}" data-i="${i}">${opts(id)}</select>`;
+    return `<div class="card court ${c.level}">
+      <div class="row"><b>${esc(c.name)}</b><span style="text-align:right"><span class="pill ${c.level}">${c.level}${c.top?' · Top':''}</span></span></div>
+      ${m ? `<div class="match"><div class="t">${slot(m.a[0],'a',0)}${slot(m.a[1],'a',1)}</div><div class="vs">vs</div><div class="t">${slot(m.b[0],'b',0)}${slot(m.b[1],'b',1)}</div></div>
+        <div class="row"><button class="btn sec reroll" data-c="${esc(c.name)}">Reshuffle</button><button class="btn finish" data-c="${esc(c.name)}">Game finished ✓</button></div>`
+          : `<p class="muted">Empty. Not enough free players at this level, or not started.</p><button class="btn sec startc" data-c="${esc(c.name)}">Start this court</button>`}
+    </div>`;}).join('') || '<div class="card muted">Add courts in Setup first.</div>';
+  document.querySelectorAll('.slot').forEach(e=>e.onchange=()=>{
+    const m = S.live[e.dataset.c]; const newId = +e.value; const oldId = m[e.dataset.t][+e.dataset.i];
+    for (const [cn,mm] of Object.entries(S.live)) if (mm) for (const t of ['a','b']) mm[t] = mm[t].map(x => x===newId ? oldId : x);
+    m[e.dataset.t][+e.dataset.i] = newId; save(); renderPlay();
+  });
+  const court = n => S.courts.find(c=>c.name===n);
+  document.querySelectorAll('.finish').forEach(e=>e.onclick=()=>{ finishCourt(S, e.dataset.c); save(); renderPlay(); });
+  document.querySelectorAll('.reroll').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=null; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); save(); renderPlay(); });
+  document.querySelectorAll('.startc').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); if(!S.live[e.dataset.c]) alert('Need 4 free players at this level.'); save(); renderPlay(); });
+  const qs = LEVELS.map(L=>{ if(!S.courts.some(c=>c.level===L)) return ''; const q=queueFor(S,L); return q.length?`<p><span class="pill ${L}">${L}</span> ${q.map((p,i)=>`${i+1}. ${esc(p.name)} <span class="tag">(${p.games})</span>`).join(' · ')}</p>`:''; }).join('');
+  $('#queueView').style.display = qs ? 'block' : 'none';
+  $('#queueView').innerHTML = `<h2>Up next</h2>${qs}<p class="muted">Order for the next free spot. (Games played in brackets.)</p>`;
 }
 
-function pickSwap(id){
-  if (selected===null) { selected=id; return renderPlay(); }
-  if (selected===id) { selected=null; return renderPlay(); }
-  const a = S.players.find(p=>p.id===selected), b = S.players.find(p=>p.id===id);
-  if (a.level!==b.level) { alert("Can't swap Improvers and Intermediate."); selected=null; return renderPlay(); }
-  const slots = [];
-  pending.matches.forEach(m=>['a','b'].forEach(t=>m[t].forEach((p,i)=>slots.push({m,t,i,p}))));
-  const sa = slots.find(s=>s.p.id===a.id), sb = slots.find(s=>s.p.id===b.id);
-  if (sa && sb) { sa.m[sa.t][sa.i]=b; sb.m[sb.t][sb.i]=a; }
-  else if (sa && !sb) { sa.m[sa.t][sa.i]=b; pending.sit = pending.sit.map(x=>x===b.id?a.id:x); }
-  else if (!sa && sb) { sb.m[sb.t][sb.i]=a; pending.sit = pending.sit.map(x=>x===a.id?b.id:x); }
-  selected=null; renderPlay();
-}
-
-$('#genRound').onclick = () => {
+$('#fillCourts').onclick = () => {
   if (!S.courts.length) return alert('Add a court in Setup first.');
-  pending = makeRound(S);
-  if (!pending.matches.length) { pending=null; return alert('Not enough players at any court level (need 4 per court).'); }
-  renderPlay();
+  S.live = S.live || {}; let n=0;
+  for (const c of S.courts) if (!S.live[c.name]) { S.live[c.name] = pickForCourt(S, c); if (S.live[c.name]) n++; }
+  if (!n) alert('No empty court could be filled (need 4 free players at that level).');
+  save(); renderPlay();
 };
-$('#reshuffle').onclick = () => { pending = makeRound(S); selected=null; renderPlay(); };
-$('#confirmRound').onclick = () => { applyRound(S, pending); S.current = pending; pending=null; selected=null; save(); renderPlay(); };
+
+// ---- Player preference mode (kiosk) ----
+let kioskMe = null, kioskPick = {};
+function renderKiosk(){
+  const body = $('#kioskBody');
+  if (!kioskMe) {
+    body.innerHTML = `<div class="card"><h2>Tap your name</h2><p class="muted">Your choices are private. Nobody else can see them, and they disappear from this screen when you finish.</p>
+      ${LEVELS.map(L=>{const ps=S.players.filter(p=>p.level===L&&!p.away).sort((a,b)=>a.name.localeCompare(b.name)); return ps.length?`<p><span class="pill ${L}">${L}</span></p>`+ps.map(p=>`<button class="btn sec kme" data-id="${p.id}" style="margin-top:6px">${esc(p.name)}</button>`).join(''):'';}).join('')}</div>`;
+    body.querySelectorAll('.kme').forEach(b=>b.onclick=()=>{ kioskMe=+b.dataset.id; kioskPick={}; renderKiosk(); });
+    return;
+  }
+  const me = S.players.find(p=>p.id===kioskMe);
+  const others = S.players.filter(p=>p.level===me.level && p.id!==me.id && !p.away).sort((a,b)=>a.name.localeCompare(b.name));
+  body.innerHTML = `<div class="card"><h2>Hi ${esc(me.name)} 👋</h2><p class="muted">👍 = I enjoy playing with them. 👎 = I'd rather not partner with them. Leave the rest blank.</p>
+    <table>${others.map(o=>`<tr><td>${esc(o.name)}</td><td class="r">
+      <button class="btn small ${kioskPick[o.id]==='up'?'':'sec'} kp" data-id="${o.id}" data-v="up">👍</button>
+      <button class="btn small ${kioskPick[o.id]==='down'?'':'sec'} kp" data-id="${o.id}" data-v="down">👎</button></td></tr>`).join('')}</table>
+    <button class="btn" id="kSave">Save &amp; hide</button><button class="btn sec" id="kCancel">Cancel</button></div>`;
+  body.querySelectorAll('.kp').forEach(b=>b.onclick=()=>{ const id=+b.dataset.id; kioskPick[id] = kioskPick[id]===b.dataset.v ? undefined : b.dataset.v; renderKiosk(); });
+  $('#kSave').onclick = () => {
+    me.prefer = Object.keys(kioskPick).filter(k=>kioskPick[k]==='up').map(Number);
+    me.avoid  = Object.keys(kioskPick).filter(k=>kioskPick[k]==='down').map(Number);
+    save(); kioskMe=null; kioskPick={};
+    $('#kioskBody').innerHTML = '<div class="card"><h2>Thanks! ✅</h2><p>Saved privately. Pass the phone to the next person.</p></div>';
+    setTimeout(renderKiosk, 1800);
+  };
+  $('#kCancel').onclick = () => { kioskMe=null; kioskPick={}; renderKiosk(); };
+}
+$('#kioskOpen').onclick = () => { kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
+$('#kioskExit').onclick = () => { if (prompt('Host only: type EXIT to leave player mode') === 'EXIT') { $('#kiosk').style.display='none'; render(); } };
 
 function render(){ renderCourts(); renderPlayers(); renderPlay(); }
 render();
