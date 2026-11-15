@@ -96,14 +96,18 @@
     </div>
     <div class="card">
       <h2>Private preferences 🔒</h2>
-      <p class="muted">Only on this phone, never shown on the Play screen. 👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible).</p>
+      <p class="muted">Only on this device, never shown on the Play screen. 👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible).</p>
+      <button class="btn" id="kioskOpen">📱 Player mode: let players add their own (private)</button>
+      <button class="btn sec" id="prefUnlock">🔒 Show / edit preferences (host only)</button>
+      <div id="prefHost" style="display:none">
       <label>Whose preferences?</label>
       <select id="prefWho"></select>
       <table id="prefTable"></table>
       <label>Or paste many at once (one player per line): <b>Name: +likes, -rather not</b></label>
       <textarea id="prefPaste" placeholder="Sam Lee: +Jo, +Alex Smith, -Max"></textarea>
       <button class="btn sec" id="prefImport">Import preferences</button>
-      <button class="btn" id="kioskOpen">📱 Player mode: let players add their own (private)</button>
+      <button class="btn sec" id="prefLock">🔒 Hide preferences</button>
+      </div>
     </div>
   </section>
 
@@ -120,7 +124,7 @@
 
 <!-- PLAYER PREFERENCE MODE (shown full-screen on the host's phone/iPad) -->
 <div id="kiosk" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:20;overflow:auto">
-  <header><h1>🏸 Who do you like playing with?</h1><nav><button id="kioskExit">Host</button></nav></header>
+  <header><h1>🏸 Who do you like playing with?</h1><nav><button id="kioskExit">Exit</button></nav></header>
   <main id="kioskBody"></main>
 </div>
 
@@ -379,7 +383,8 @@ if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () => {
+  $('#prefHost').style.display='none';
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x===b));
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('on', s.id===b.dataset.tab));
   render();
@@ -439,7 +444,7 @@ $('#prefImport').onclick = () => {
   for (const raw of $('#prefPaste').value.split('\n')) {
     const line = raw.trim(); if (!line) continue;
     const i = line.indexOf(':'); const me = i > 0 ? find(line.slice(0, i)) : null;
-    if (!me) { bad.push(line); continue; }
+    if (!me || me.pin) { bad.push(line); continue; }
     me.prefer = me.prefer || []; me.avoid = me.avoid || [];
     for (const tok of line.slice(i + 1).split(',')) {
       const t = tok.trim(); if (!t) continue;
@@ -460,11 +465,17 @@ function renderPrefs(){
   if (!ps.some(p=>p.id===prefWho)) prefWho = ps.length ? ps[0].id : null;
   $('#prefWho').innerHTML = ps.map(p=>{
     const n=(p.prefer||[]).length+(p.avoid||[]).length;
-    return `<option value="${p.id}" ${p.id===prefWho?'selected':''}>${esc(p.name)} (${p.level==='Improvers'?'Imp':'Int'})${n?' · '+n+' set':''}</option>`;}).join('');
+    return `<option value="${p.id}" ${p.id===prefWho?'selected':''}>${esc(p.name)} (${p.level==='Improvers'?'Imp':'Int'})${p.pin?' · 🔒 private':n?' · '+n+' set':''}</option>`;}).join('');
   $('#prefWho').onchange = e => { prefWho = +e.target.value; renderPrefs(); };
   const me = S.players.find(p=>p.id===prefWho);
   if (!me) { $('#prefTable').innerHTML=''; return; }
   me.prefer = me.prefer||[]; me.avoid = me.avoid||[];
+  if (me.pin) {
+    $('#prefTable').innerHTML = `<tr><td>🔒 ${esc(me.name)} locked their choices with a personal PIN. They still count in the pairings.</td></tr>
+      <tr><td><button class="btn small sec" id="prefReset">Clear their choices and PIN (if they forgot it)</button></td></tr>`;
+    $('#prefReset').onclick = () => { if (confirm('Clear '+me.name+"'s choices and PIN? You won't see what they were.")) { me.prefer=[]; me.avoid=[]; delete me.pin; save(); renderPrefs(); } };
+    return;
+  }
   const others = ps.filter(p=>p.id!==me.id && p.level===me.level);
   $('#prefTable').innerHTML = others.map(o=>{
     const st = me.prefer.includes(o.id)?'up':me.avoid.includes(o.id)?'down':'';
@@ -525,8 +536,13 @@ function renderKiosk(){
   const body = $('#kioskBody');
   if (!kioskMe) {
     body.innerHTML = `<div class="card"><h2>Tap your name</h2><p class="muted">Your choices are private. Nobody else can see them, and they disappear from this screen when you finish.</p>
-      ${LEVELS.map(L=>{const ps=S.players.filter(p=>p.level===L&&!p.away).sort((a,b)=>a.name.localeCompare(b.name)); return ps.length?`<p><span class="pill ${L}">${L}</span></p>`+ps.map(p=>`<button class="btn sec kme" data-id="${p.id}" style="margin-top:6px">${esc(p.name)}</button>`).join(''):'';}).join('')}</div>`;
-    body.querySelectorAll('.kme').forEach(b=>b.onclick=()=>{ kioskMe=+b.dataset.id; kioskPick={}; renderKiosk(); });
+      ${LEVELS.map(L=>{const ps=S.players.filter(p=>p.level===L&&!p.away).sort((a,b)=>a.name.localeCompare(b.name)); return ps.length?`<p><span class="pill ${L}">${L}</span></p>`+ps.map(p=>`<button class="btn sec kme" data-id="${p.id}" style="margin-top:6px">${esc(p.name)}${p.pin?' 🔒':''}</button>`).join(''):'';}).join('')}</div>`;
+    body.querySelectorAll('.kme').forEach(b=>b.onclick=()=>{
+      const p = S.players.find(x=>x.id===+b.dataset.id);
+      if (p.pin) { const v = prompt('🔒 '+p.name+', enter your PIN'); if (v===null) return; if (v!==p.pin) return alert('Wrong PIN.'); }
+      kioskMe=p.id; kioskPick={};
+      if (p.pin) { (p.prefer||[]).forEach(id=>kioskPick[id]='up'); (p.avoid||[]).forEach(id=>kioskPick[id]='down'); }
+      renderKiosk(); });
     return;
   }
   const me = S.players.find(p=>p.id===kioskMe);
@@ -535,9 +551,16 @@ function renderKiosk(){
     <table>${others.map(o=>`<tr><td>${esc(o.name)}</td><td class="r">
       <button class="btn small ${kioskPick[o.id]==='up'?'':'sec'} kp" data-id="${o.id}" data-v="up">👍</button>
       <button class="btn small ${kioskPick[o.id]==='down'?'':'sec'} kp" data-id="${o.id}" data-v="down">👎</button></td></tr>`).join('')}</table>
+    <label style="margin-top:14px"><input type="checkbox" id="kLock" style="width:auto" ${me.pin?'checked':''}> 🔒 Lock my choices with my own 4-digit PIN (optional). Then nobody, not even the host, can see them.</label>
     <button class="btn" id="kSave">Save &amp; hide</button><button class="btn sec" id="kCancel">Cancel</button></div>`;
   body.querySelectorAll('.kp').forEach(b=>b.onclick=()=>{ const id=+b.dataset.id; kioskPick[id] = kioskPick[id]===b.dataset.v ? undefined : b.dataset.v; renderKiosk(); });
   $('#kSave').onclick = () => {
+    if ($('#kLock').checked && !me.pin) {
+      const v = prompt('Choose a 4-digit PIN (you need it to change your choices later)');
+      if (v===null) return; if (!/^\d{4}$/.test(v)) return alert('Use exactly 4 digits.');
+      if (prompt('Type it again') !== v) return alert("PINs didn't match. Try again.");
+      me.pin = v;
+    } else if (!$('#kLock').checked) delete me.pin;
     me.prefer = Object.keys(kioskPick).filter(k=>kioskPick[k]==='up').map(Number);
     me.avoid  = Object.keys(kioskPick).filter(k=>kioskPick[k]==='down').map(Number);
     save(); kioskMe=null; kioskPick={};
@@ -546,8 +569,15 @@ function renderKiosk(){
   };
   $('#kCancel').onclick = () => { kioskMe=null; kioskPick={}; renderKiosk(); };
 }
-$('#kioskOpen').onclick = () => { kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
-$('#kioskExit').onclick = () => { if (prompt('Host only: type EXIT to leave player mode') === 'EXIT') { $('#kiosk').style.display='none'; render(); } };
+$('#kioskOpen').onclick = () => { $('#prefHost').style.display='none'; kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
+function goTab(t){
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x.dataset.tab===t));
+  document.querySelectorAll('section').forEach(x=>x.classList.toggle('on', x.id===t));
+  $('#prefHost').style.display='none'; render();
+}
+$('#kioskExit').onclick = () => { if (confirm('Leave player mode?')) { $('#kiosk').style.display='none'; kioskMe=null; goTab('play'); } };
+$('#prefUnlock').onclick = () => { if (confirm("Host only: show everyone's preferences?")) { $('#prefHost').style.display='block'; renderPrefs(); } };
+$('#prefLock').onclick = () => { $('#prefHost').style.display='none'; };
 
 function render(){ renderCourts(); renderPlayers(); renderPlay(); }
 render();
