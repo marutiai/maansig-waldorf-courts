@@ -327,27 +327,33 @@ function freePool(state, level, except){
 // tie, choose the four who have played together least. Back-to-back games and sit-outs
 // are allowed when that is what it takes to get new combinations.
 function chooseFour(pool, rand){
+  // Variety first. Fairness is kept loose: anyone within one game of the lowest count can be
+  // picked, so someone may sit an extra game now and play an extra one later. Hard limits:
+  // nobody sits 3 in a row or plays 3 in a row if it can be avoided, and the totals never
+  // drift more than 1 apart while picking.
   const r = rand || Math.random;
-  const sorted = pool.slice().sort((p,q)=> p.games-q.games || q.satStreak-p.satStreak || r()-0.5);
-  const g4 = sorted[3].games;
-  const must = sorted.filter(p=>p.games < g4);
-  let opt = sorted.filter(p=>p.games === g4);
-  if (opt.length > 10) opt = opt.slice(0,10);
-  const need = 4 - must.length;
+  const minG = Math.min(...pool.map(p=>p.games));
+  const must = pool.filter(p=>p.games===minG && p.satStreak>=2);           // waited 2 in a row: on now
+  let opt = pool.filter(p=>!must.includes(p) && p.games<=minG+1 && p.streak<2);
+  if (must.length + opt.length < 4) opt = pool.filter(p=>!must.includes(p));
+  opt.sort((p,q)=> p.games-q.games || q.satStreak-p.satStreak || r()-0.5);
+  if (opt.length > 11) opt = opt.slice(0,11);
+  const four0 = must.slice(0,4);
+  const need = 4 - four0.length;
   const together = (p,q) => (p.partners[q.id]||0) + (p.opponents[q.id]||0);
   const clash = (p,q) => dislikes(p,q) || dislikes(q,p);
   let best = null;
-  const combos = (arr, k, start=0, cur=[]) => {
-    if (cur.length===k) { score(cur); return; }
-    for (let i=start; i<arr.length; i++) { cur.push(arr[i]); combos(arr,k,i+1,cur); cur.pop(); }
-  };
   const score = (extra) => {
-    const four = must.concat(extra);
+    const four = four0.concat(extra);
     let s = 0;
-    for (let i=0;i<4;i++) for (let j=i+1;j<4;j++) { s += together(four[i],four[j])*4; if (clash(four[i],four[j])) s += 100; }
-    for (const p of four) { s += p.streak*3; s -= p.satStreak*3; if (p.streak>=2) s += 20; if (p.satStreak>=2) s -= 20; }
+    for (let i=0;i<4;i++) for (let j=i+1;j<4;j++) { s += together(four[i],four[j])*4; if (clash(four[i],four[j])) s += 200; }
+    for (const p of four) { s += (p.games-minG)*5; s += p.streak*2; s -= p.satStreak*3; }
     s += r()*0.5;
     if (!best || s < best.s) best = { s, four };
+  };
+  const combos = (arr, k, start=0, cur=[]) => {
+    if (cur.length===k) { score(cur.slice()); return; }
+    for (let i=start; i<arr.length; i++) { cur.push(arr[i]); combos(arr,k,i+1,cur); cur.pop(); }
   };
   combos(opt, need);
   return { play: best.four, sit: pool.filter(p=>!best.four.includes(p)) };
@@ -422,6 +428,13 @@ function roundFromIds(r){ const by = id => S.players.find(p=>p.id===id); return 
 if (S.current) S.current = roundFromIds(S.current);
 
 // Optional preloaded list (window.PRELOAD = {tag, courts, players:[{name,level,rating}]})
+if (location.hash.startsWith('#setup=')) {
+  try {
+    const b64 = location.hash.slice(7).replace(/-/g,'+').replace(/_/g,'/');
+    window.PRELOAD = JSON.parse(decodeURIComponent(escape(atob(b64))));
+  } catch(e) { alert('That setup link looks broken.'); }
+  history.replaceState(null, '', location.pathname);
+}
 if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
   const P = window.PRELOAD;
   const fresh = !S.players.length || confirm(`Load the player list for ${P.tag}? This replaces the current players.`);
@@ -429,6 +442,7 @@ if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
     S.players = []; S.nextId = 1; S.roundNo = 0; S.current = null;
     for (const p of P.players) S.players.push(newPlayer(p, S.nextId++));
     if (P.courts) S.courts = P.courts;
+    S.live = {};
   }
   S.preloadTag = P.tag; save();
 }
