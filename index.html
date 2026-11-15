@@ -75,6 +75,11 @@
       <p class="muted">8 on a court = 4 play, 4 sit each game.</p>
     </div>
     <div class="card">
+      <h2>Host PIN 🔒</h2>
+      <p class="muted">Protects the private preferences and Player mode. Set a 4-digit PIN that only hosts know.</p>
+      <button class="btn sec" id="setPin">Set / change PIN</button>
+    </div>
+    <div class="card">
       <h2>Session</h2>
       <button class="btn sec" id="newSession">Start a new session (keep players, reset games)</button>
       <button class="btn sec" id="clearAll">Clear everything</button>
@@ -96,14 +101,18 @@
     </div>
     <div class="card">
       <h2>Private preferences 🔒</h2>
-      <p class="muted">Only on this phone, never shown on the Play screen. 👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible).</p>
+      <p class="muted">Only on this device, never shown on the Play screen. 👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible).</p>
+      <button class="btn" id="kioskOpen">📱 Player mode: let players add their own (private)</button>
+      <button class="btn sec" id="prefUnlock">🔒 Show / edit preferences (host PIN)</button>
+      <div id="prefHost" style="display:none">
       <label>Whose preferences?</label>
       <select id="prefWho"></select>
       <table id="prefTable"></table>
       <label>Or paste many at once (one player per line): <b>Name: +likes, -rather not</b></label>
       <textarea id="prefPaste" placeholder="Sam Lee: +Jo, +Alex Smith, -Max"></textarea>
       <button class="btn sec" id="prefImport">Import preferences</button>
-      <button class="btn" id="kioskOpen">📱 Player mode: let players add their own (private)</button>
+      <button class="btn sec" id="prefLock">🔒 Hide preferences</button>
+      </div>
     </div>
   </section>
 
@@ -546,8 +555,22 @@ function renderKiosk(){
   };
   $('#kCancel').onclick = () => { kioskMe=null; kioskPick={}; renderKiosk(); };
 }
-$('#kioskOpen').onclick = () => { kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
-$('#kioskExit').onclick = () => { if (prompt('Host only: type EXIT to leave player mode') === 'EXIT') { $('#kiosk').style.display='none'; render(); } };
+$('#kioskOpen').onclick = () => { if (!S.pin) return alert('Set a host PIN first (Setup tab → Host PIN), so players can\'t leave Player mode.'); $('#prefHost').style.display='none'; kioskMe=null; $('#kiosk').style.display='block'; renderKiosk(); };
+function askPin(msg){
+  if (!S.pin) { alert('Set a host PIN first (Setup tab → Host PIN).'); return false; }
+  const v = prompt(msg || 'Host PIN'); if (v === null) return false;
+  if (v === S.pin) return true; alert('Wrong PIN.'); return false;
+}
+$('#kioskExit').onclick = () => { if (askPin('Host PIN to leave player mode')) { $('#kiosk').style.display='none'; render(); } };
+$('#setPin').onclick = () => {
+  if (S.pin && !askPin('Current host PIN')) return;
+  const v = prompt('New 4-digit host PIN'); if (!v) return;
+  if (!/^\d{4}$/.test(v)) return alert('Use exactly 4 digits.');
+  if (prompt('Type the new PIN again') !== v) return alert("PINs didn't match.");
+  S.pin = v; save(); alert('PIN saved on this device.');
+};
+$('#prefUnlock').onclick = () => { if (askPin()) { $('#prefHost').style.display='block'; renderPrefs(); } };
+$('#prefLock').onclick = () => { $('#prefHost').style.display='none'; };
 
 function render(){ renderCourts(); renderPlayers(); renderPlay(); }
 render();
