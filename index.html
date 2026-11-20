@@ -73,6 +73,7 @@
       <select id="mode">
         <option value="each">Fair queue: fewest games play next</option>
         <option value="two">Play 2 games, then sit out</option>
+        <option value="stagger">Swap 2 each game: 2 stay, 2 new (play 2, sit 2)</option>
       </select>
       <p class="muted">8 on a court = 4 play, 4 sit each game.</p>
       <label style="margin-top:10px"><input type="checkbox" id="sync" style="width:auto"> <b>Courts change together</b> (best mixing): when a court finishes it waits for the other courts of its level, then everyone is reshuffled across all of them.</label>
@@ -185,12 +186,13 @@ function newPlayer(p, id){
 }
 
 function resetStats(players){
-  for (const p of players) { p.games=0; p.played=0; p.streak=0; p.satStreak=0; p.lastRound=-1; p.partners={}; p.opponents={}; }
+  for (const p of players) { p.games=0; p.played=0; p.streak=0; p.satStreak=0; p.lastRound=-1; p.rest=0; p.partners={}; p.opponents={}; }
 }
 
 // Pick who plays this round for one level. Returns {play:[], sit:[]}
 function choosePlayers(pool, slots, mode, rand){
   const r = rand || Math.random;
+  if (mode === 'stagger') return chooseStagger(pool, slots, r);
   const scored = pool.map(p => {
     let pri = 0;
     if (mode === 'two') {
@@ -206,6 +208,21 @@ function choosePlayers(pool, slots, mode, rand){
   }).sort((a,b) => a.pri - b.pri);
   const n = Math.min(slots, Math.floor(pool.length/4)*4);
   return { play: scored.slice(0,n).map(x=>x.p), sit: scored.slice(n).map(x=>x.p) };
+}
+
+// Staggered: each game 2 stay on and 2 come in. Play 2 in a row, then sit 2 in a row.
+// If there aren't enough rested people, someone repeats a game and then sits 2.
+function chooseStagger(pool, slots, r){
+  const n = Math.min(slots, Math.floor(pool.length/4)*4);
+  const by = (f) => pool.filter(f).map(p=>({p, k: p.games*10 - p.satStreak*5 + r()})).sort((a,b)=>a.k-b.k).map(x=>x.p);
+  const keep   = by(p => p.streak === 1);
+  const fresh  = by(p => p.streak === 0 && !(p.rest > 0));
+  const resting= by(p => p.streak === 0 && p.rest > 0);
+  const repeat = by(p => p.streak >= 2);
+  const keepN = Math.min(keep.length, n/2);
+  const order = [...keep.slice(0,keepN), ...fresh, ...resting, ...repeat, ...keep.slice(keepN)];
+  const play = order.slice(0,n);
+  return { play, sit: pool.filter(p=>!play.includes(p)) };
 }
 
 // Best 2v2 split of four players. Returns {a:[p,p], b:[p,p], cost}
@@ -311,7 +328,7 @@ function applyRound(state, round){
   for (const p of state.players) {
     if (p.away) continue;
     if (playing.has(p.id)) { p.games++; p.played=(p.played||0)+1; p.streak++; p.satStreak=0; p.lastRound=n; }
-    else { p.streak=0; p.satStreak++; }
+    else { if (p.streak>=2) p.rest=1; else if (p.rest>0) p.rest--; p.streak=0; p.satStreak++; }
   }
   state.roundNo = n;
 }
@@ -369,7 +386,7 @@ function chooseFour(pool, rand){
 function pickForCourt(state, court, rand){
   const pool = freePool(state, court.level, court.name);
   if (pool.length < 4) return null;
-  let pick = state.mode === 'two' ? choosePlayers(pool, 4, state.mode, rand) : chooseFour(pool, rand);
+  let pick = (state.mode === 'two' || state.mode === 'stagger') ? choosePlayers(pool, 4, state.mode, rand) : chooseFour(pool, rand);
   if (court.top) {   // top court: strongest of those due to play next
     const due = choosePlayers(pool, Math.min(pool.length, 8), state.mode, rand).play;
     const four = due.slice().sort((p,q)=>q.rating-p.rating).slice(0,4);
@@ -405,7 +422,7 @@ function finishCourt(state, courtName, refill=true){
   for (const p of state.players) {
     if (p.away) continue;
     if (played.has(p.id)) { p.games++; p.played=(p.played||0)+1; p.streak++; p.satStreak=0; }
-    else if (court && p.level===court.level && !busy.has(p.id)) { p.streak=0; p.satStreak++; }
+    else if (court && p.level===court.level && !busy.has(p.id)) { if (p.streak>=2) p.rest=1; else if (p.rest>0) p.rest--; p.streak=0; p.satStreak++; }
   }
   for (const id of played) { const p = by(id); if (p) p.lastMates = [...played].filter(x=>x!==id); }
   state.live[courtName] = null;
