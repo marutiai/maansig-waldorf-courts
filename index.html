@@ -73,7 +73,7 @@
       <select id="mode">
         <option value="each">Fair queue: fewest games play next</option>
         <option value="two">Play 2 games, then sit out</option>
-        <option value="stagger">Swap 2 each game: 2 stay, 2 new (play 2, sit 2)</option>
+        <option value="stagger">Swap 2 each game: 2 stay, 2 new, everyone level</option>
       </select>
       <p class="muted">8 on a court = 4 play, 4 sit each game.</p>
       <label style="margin-top:10px"><input type="checkbox" id="sync" style="width:auto"> <b>Courts change together</b> (best mixing): when a court finishes it waits for the other courts of its level, then everyone is reshuffled across all of them.</label>
@@ -210,18 +210,22 @@ function choosePlayers(pool, slots, mode, rand){
   return { play: scored.slice(0,n).map(x=>x.p), sit: scored.slice(n).map(x=>x.p) };
 }
 
-// Staggered: each game 2 stay on and 2 come in. Play 2 in a row, then sit 2 in a row.
-// If there aren't enough rested people, someone repeats a game and then sits 2.
+// Staggered: fewest games always play first, so everyone stays level. When there's a
+// choice, keep 2 from the last game on court and bring in people they've played with least.
 function chooseStagger(pool, slots, r){
   const n = Math.min(slots, Math.floor(pool.length/4)*4);
-  const by = (f) => pool.filter(f).map(p=>({p, k: p.games*10 - p.satStreak*5 + r()})).sort((a,b)=>a.k-b.k).map(x=>x.p);
-  const keep   = by(p => p.streak === 1);
-  const fresh  = by(p => p.streak === 0 && !(p.rest > 0));
-  const resting= by(p => p.streak === 0 && p.rest > 0);
-  const repeat = by(p => p.streak >= 2);
-  const keepN = Math.min(keep.length, n/2);
-  const order = [...keep.slice(0,keepN), ...fresh, ...resting, ...repeat, ...keep.slice(keepN)];
-  const play = order.slice(0,n);
+  const play = [];
+  const met = (p,q) => ((p.partners||{})[q.id]||0) + ((p.opponents||{})[q.id]||0);
+  while (play.length < n) {
+    const left = pool.filter(p=>!play.includes(p));
+    const g = Math.min(...left.map(p=>p.games));
+    const tier = left.filter(p=>p.games===g);
+    const kept = play.filter(p=>p.streak>=1).length;
+    const score = p => (p.streak>=1 ? (kept<2 ? -1000 : 1000) : 0) - p.satStreak*10
+                       + play.reduce((t,q)=>t+met(p,q),0)*5 + r();
+    tier.sort((x,y)=>score(x)-score(y));
+    play.push(tier[0]);
+  }
   return { play, sit: pool.filter(p=>!play.includes(p)) };
 }
 
