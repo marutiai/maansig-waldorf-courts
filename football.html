@@ -38,11 +38,12 @@ input{font-size:17px;padding:10px;border:1px solid #ccd3d8;border-radius:8px;wid
   <b>How good are you?</b>
   <div class="chips" id="rate"></div>
   <p class="muted">1 = new / rusty · 3 = decent · 5 = very strong</p>
-  <button class="big" id="save">Save</button><button class="big ghost" id="cancel">Back</button>
+  <button class="big" id="save">Save</button><button class="big ghost" id="cancel">Back</button><button class="big ghost" id="reset" style="color:#b03a2e">Reset (wrong name picked)</button>
 </div></section>
 <section id="teams" style="display:none">
   <div class="card"><b>Number of teams</b><div class="chips" id="nt"></div>
-  <label><input type="checkbox" id="onlyDone" style="width:auto" checked> Only players who've filled in details</label>
+  <label><input type="checkbox" id="onlyDone" style="width:auto" checked> Only players who've filled in details (latecomers can fill in later, then tap Make teams again)</label>
+  <button class="big ghost" id="late">Add latecomers to current teams</button>
   <button class="big" id="make">Make teams</button><button class="big ghost" id="again">Shuffle (another fair split)</button></div>
   <div id="out"></div>
   <div class="card"><b>Back up answers</b><p class="muted">Copies everyone's positions and ratings. Paste it in your chat with Isabella and she saves it to the sheet.</p><button class="big ghost" id="exp">📋 Copy answers for Isabella</button></div>
@@ -71,6 +72,7 @@ function drawForm(){$('pos').innerHTML=POS.map(x=>`<button class="chip ${selPos.
   document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{selRate=+b.dataset.r;drawForm();});}
 $('save').onclick=()=>{if(!selRate){alert('Pick a rating 1-5');return;}cur.pos=selPos;cur.rating=selRate;save();renderNames();show('players');};
 $('cancel').onclick=()=>show('players');
+$('reset').onclick=()=>{if(!confirm('Clear '+cur.name+"'s answers?"))return;cur.pos=[];cur.rating=0;save();renderNames();show('players');};
 $('add').onclick=()=>{const n=$('newName').value.trim();if(!n)return;if(!S.players.some(p=>p.name===n))S.players.push({name:n,pos:[],rating:0});$('newName').value='';save();renderNames();openForm(n);};
 $('tP').onclick=()=>show('players');$('tT').onclick=()=>{drawNT();show('teams');};
 function drawNT(){$('nt').innerHTML=[2,3,4].map(x=>`<button class="chip ${S.teams===x?'on':''}" data-t="${x}">${x}</button>`).join('');
@@ -92,8 +94,18 @@ function makeTeams(rand){
       const d=Math.abs(sum(T[a])-sum(T[b])),d2=Math.abs(sum(T[a])-x.r+y.r-(sum(T[b])-y.r+x.r));
       if(d2<d&&(x.main===y.main||rand()<.15)){T[a][T[a].indexOf(x)]=y;T[b][T[b].indexOf(y)]=x;improved=true;}}
     if(!improved)break;}
+  lastT=T; drawTeams(T);}
+function drawTeams(T){const sum=t=>t.reduce((s,p)=>s+p.r,0);
   const colours=['🔴 Red','🔵 Blue','🟡 Yellow','🟢 Green'];
   $('out').innerHTML=T.map((t,i)=>`<div class="card team"><h2>${colours[i]} <span>${t.length} players · ${sum(t)}★</span></h2>${t.sort((a,b)=>POS.indexOf(a.main)-POS.indexOf(b.main)).map(p=>`<div>${esc(p.name)} <span class="muted">${p.pos.join(', ')||'any'} · ${p.rating||'?'}★</span></div>`).join('')}</div>`).join('');}
+let lastT=null;
+$('late').onclick=()=>{if(!lastT){alert('Make teams first');return;}
+  const inT=new Set(lastT.flat().map(p=>p.name));
+  const news=S.players.filter(p=>p.rating&&!inT.has(p.name)).map(p=>({...p,r:p.rating,main:p.pos[0]||'Any'})).sort((a,b)=>b.r-a.r);
+  if(!news.length){alert('No new players filled in yet');return;}
+  const sum=t=>t.reduce((s,p)=>s+p.r,0);
+  for(const p of news){lastT.slice().sort((a,b)=>a.length-b.length||sum(a)-sum(b))[0].push(p);}
+  drawTeams(lastT);};
 $('make').onclick=()=>makeTeams(()=>0.5);$('again').onclick=()=>makeTeams(Math.random);
 $('exp').onclick=async()=>{const done=S.players.filter(p=>p.rating);
   const txt='Football answers ('+new Date().toLocaleDateString('en-GB')+'):\n'+done.map(p=>p.name+' | '+(p.pos.join(', ')||'any')+' | '+p.rating).join('\n');
