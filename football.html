@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Waldorf Football Teams</title>
+<style>
+body{font-family:-apple-system,system-ui,sans-serif;margin:0;background:#f4f6f8;color:#1c2833}
+header{background:#1e5631;color:#fff;padding:12px 16px;display:flex;gap:8px;align-items:center}
+header h1{font-size:18px;margin:0;flex:1}
+nav button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);border-radius:16px;padding:6px 12px;font-size:14px}
+nav button.on{background:#fff;color:#1e5631}
+main{padding:12px;max-width:640px;margin:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.nm{background:#fff;border:2px solid #d5dbe0;border-radius:12px;padding:14px 8px;font-size:17px;text-align:center}
+.nm.done{border-color:#2e8b57;background:#eaf6ee}
+.nm small{display:block;color:#5d6d7e;font-size:12px;margin-top:4px}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}
+.chip{border:2px solid #d5dbe0;background:#fff;border-radius:22px;padding:12px 16px;font-size:17px}
+.chip.on{background:#1e5631;border-color:#1e5631;color:#fff}
+.big{width:100%;padding:16px;font-size:18px;border:none;border-radius:12px;background:#1e5631;color:#fff;margin-top:8px}
+.ghost{background:#e5e8eb;color:#1c2833}
+h2{font-size:17px;margin:4px 0 8px}
+.team h2 span{float:right;color:#5d6d7e;font-weight:normal;font-size:14px}
+.team div{padding:6px 0;border-bottom:1px solid #eef1f3}
+.muted{color:#5d6d7e;font-size:13px}
+input{font-size:17px;padding:10px;border:1px solid #ccd3d8;border-radius:8px;width:100%;box-sizing:border-box}
+</style></head><body>
+<header><h1>⚽ Waldorf Teams</h1><nav><button id="tP" class="on">Players</button> <button id="tT">Teams</button></nav></header>
+<main>
+<section id="players">
+  <p class="muted">Tap your name, pick positions and rate yourself.</p>
+  <div class="grid" id="names"></div>
+  <div class="card" style="margin-top:12px"><input id="newName" placeholder="Not listed? Add a name"><button class="big ghost" id="add">Add player</button></div>
+</section>
+<section id="form" style="display:none"><div class="card">
+  <h2 id="who"></h2>
+  <b>Positions</b> <span class="muted">(tap all you play)</span>
+  <div class="chips" id="pos"></div>
+  <b>How good are you?</b>
+  <div class="chips" id="rate"></div>
+  <p class="muted">1 = new / rusty · 3 = decent · 5 = very strong</p>
+  <button class="big" id="save">Save</button><button class="big ghost" id="cancel">Back</button>
+</div></section>
+<section id="teams" style="display:none">
+  <div class="card"><b>Number of teams</b><div class="chips" id="nt"></div>
+  <label><input type="checkbox" id="onlyDone" style="width:auto" checked> Only players who've filled in details</label>
+  <button class="big" id="make">Make teams</button><button class="big ghost" id="again">Shuffle (another fair split)</button></div>
+  <div id="out"></div>
+</section>
+</main>
+<script>
+const POS=['GK','Defence','Midfield','Attack'];
+const K='wf-football';
+let S=JSON.parse(localStorage.getItem(K)||'{"players":[],"teams":2}');
+function save(){localStorage.setItem(K,JSON.stringify(S));}
+// names can arrive via private #setup= link, never stored in the repo
+if(location.hash.startsWith('#setup=')){try{const names=JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(7)))));
+  names.forEach(n=>{if(!S.players.some(p=>p.name===n))S.players.push({name:n,pos:[],rating:0});});save();}catch(e){}
+  history.replaceState(null,'',location.pathname);}
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let cur=null,selPos=[],selRate=0;
+function show(id){['players','form','teams'].forEach(s=>$(s).style.display=s===id?'block':'none');$('tP').className=id==='teams'?'':'on';$('tT').className=id==='teams'?'on':'';}
+function renderNames(){const ps=S.players.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  $('names').innerHTML=ps.map(p=>`<button class="nm ${p.rating?'done':''}" data-n="${esc(p.name)}">${esc(p.name)}${p.rating?`<small>${p.pos.join(', ')||'-'} · ${p.rating}★</small>`:''}</button>`).join('');
+  document.querySelectorAll('.nm').forEach(b=>b.onclick=()=>openForm(b.dataset.n));}
+function openForm(n){cur=S.players.find(p=>p.name===n);selPos=cur.pos.slice();selRate=cur.rating;$('who').textContent=cur.name;drawForm();show('form');}
+function drawForm(){$('pos').innerHTML=POS.map(x=>`<button class="chip ${selPos.includes(x)?'on':''}" data-p="${x}">${x}</button>`).join('');
+  $('rate').innerHTML=[1,2,3,4,5].map(x=>`<button class="chip ${selRate===x?'on':''}" data-r="${x}">${x}</button>`).join('');
+  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{const p=b.dataset.p;selPos=selPos.includes(p)?selPos.filter(x=>x!==p):[...selPos,p];drawForm();});
+  document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{selRate=+b.dataset.r;drawForm();});}
+$('save').onclick=()=>{if(!selRate){alert('Pick a rating 1-5');return;}cur.pos=selPos;cur.rating=selRate;save();renderNames();show('players');};
+$('cancel').onclick=()=>show('players');
+$('add').onclick=()=>{const n=$('newName').value.trim();if(!n)return;if(!S.players.some(p=>p.name===n))S.players.push({name:n,pos:[],rating:0});$('newName').value='';save();renderNames();openForm(n);};
+$('tP').onclick=()=>show('players');$('tT').onclick=()=>{drawNT();show('teams');};
+function drawNT(){$('nt').innerHTML=[2,3,4].map(x=>`<button class="chip ${S.teams===x?'on':''}" data-t="${x}">${x}</button>`).join('');
+  document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{S.teams=+b.dataset.t;save();drawNT();});}
+// Main position = first picked; GK counted separately so keepers spread out.
+function makeTeams(rand){
+  const pool=S.players.filter(p=>!$('onlyDone').checked||p.rating).map(p=>({...p,r:p.rating||3,main:p.pos[0]||'Any'}));
+  const n=S.teams,T=[...Array(n)].map(()=>[]);
+  const sum=t=>t.reduce((s,p)=>s+p.r,0);
+  // group by main position, strongest first; each player to the weakest team (ties: fewest of that position, then fewest players)
+  const order=pool.sort((a,b)=>(POS.indexOf(a.main)-POS.indexOf(b.main))||(b.r-a.r)||(rand()-.5));
+  for(const p of order){let best=null,bk=null;
+    T.forEach((t,i)=>{const k=[t.length,t.filter(x=>x.main===p.main).length,sum(t),rand()];
+      if(!bk||k[0]<bk[0]||(k[0]===bk[0]&&(k[1]<bk[1]||(k[1]===bk[1]&&k[2]<bk[2])))){bk=k;best=i;}});
+    T[best].push(p);}
+  // polish: swap pairs between teams to even out total rating
+  for(let it=0;it<200;it++){let improved=false;
+    for(let a=0;a<n;a++)for(let b=a+1;b<n;b++)for(const x of T[a])for(const y of T[b]){
+      const d=Math.abs(sum(T[a])-sum(T[b])),d2=Math.abs(sum(T[a])-x.r+y.r-(sum(T[b])-y.r+x.r));
+      if(d2<d&&(x.main===y.main||rand()<.15)){T[a][T[a].indexOf(x)]=y;T[b][T[b].indexOf(y)]=x;improved=true;}}
+    if(!improved)break;}
+  const colours=['🔴 Red','🔵 Blue','🟡 Yellow','🟢 Green'];
+  $('out').innerHTML=T.map((t,i)=>`<div class="card team"><h2>${colours[i]} <span>${t.length} players · ${sum(t)}★</span></h2>${t.sort((a,b)=>POS.indexOf(a.main)-POS.indexOf(b.main)).map(p=>`<div>${esc(p.name)} <span class="muted">${p.pos.join(', ')||'any'} · ${p.rating||'?'}★</span></div>`).join('')}</div>`).join('');}
+$('make').onclick=()=>makeTeams(()=>0.5);$('again').onclick=()=>makeTeams(Math.random);
+renderNames();
+</script></body></html>
