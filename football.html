@@ -45,6 +45,7 @@ input{font-size:17px;padding:10px;border:1px solid #ccd3d8;border-radius:8px;wid
   <label><input type="checkbox" id="onlyDone" style="width:auto" checked> Only players who've filled in details</label>
   <button class="big" id="make">Make teams</button><button class="big ghost" id="again">Shuffle (another fair split)</button></div>
   <div id="out"></div>
+  <div class="card"><b>Back up answers</b><p class="muted">Copies everyone's positions and ratings. Paste it in your chat with Isabella and she saves it to the sheet.</p><button class="big ghost" id="exp">📋 Copy answers for Isabella</button></div>
 </section>
 </main>
 <script>
@@ -94,5 +95,9 @@ function makeTeams(rand){
   const colours=['🔴 Red','🔵 Blue','🟡 Yellow','🟢 Green'];
   $('out').innerHTML=T.map((t,i)=>`<div class="card team"><h2>${colours[i]} <span>${t.length} players · ${sum(t)}★</span></h2>${t.sort((a,b)=>POS.indexOf(a.main)-POS.indexOf(b.main)).map(p=>`<div>${esc(p.name)} <span class="muted">${p.pos.join(', ')||'any'} · ${p.rating||'?'}★</span></div>`).join('')}</div>`).join('');}
 $('make').onclick=()=>makeTeams(()=>0.5);$('again').onclick=()=>makeTeams(Math.random);
+$('exp').onclick=async()=>{const done=S.players.filter(p=>p.rating);
+  const txt='Football answers ('+new Date().toLocaleDateString('en-GB')+'):\n'+done.map(p=>p.name+' | '+(p.pos.join(', ')||'any')+' | '+p.rating).join('\n');
+  try{await navigator.clipboard.writeText(txt);alert('Copied '+done.length+' players. Now paste it in your chat with Isabella.');}
+  catch(e){prompt('Copy this:',txt);}};
 renderNames();
 </script></body></html>
