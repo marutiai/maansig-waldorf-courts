@@ -46,6 +46,7 @@
   .tag { font-size:12px; color:var(--mut); }
   .stars button { border:none; background:none; font-size:18px; padding:0 1px; color:#ccd3d8; }
   .stars button.on { color:#f0a24a; }
+#playerTable .stars{display:none}
 </style>
 </head>
 <body>
@@ -53,7 +54,7 @@
   <h1>🏸 Waldorf Courts</h1>
   <nav>
     <button data-tab="setup" class="on">Setup</button>
-    <button data-tab="host">Host 🔒</button>
+    <button data-tab="host">Check-in</button>
     <button data-tab="players">Players</button>
     <button data-tab="play">Play</button>
     <button data-tab="scores">🏆 Scores</button>
@@ -95,7 +96,11 @@
 
   <!-- HOST (organisers only) -->
   <section id="host">
-    <div class="card">
+    <div class="card" id="checkinCard">
+      <div id="checkinView"></div>
+      <button class="btn sec" id="startCheckin2" style="display:none">✋ Start check-in (mark everyone as not arrived)</button>
+    </div>
+    <div class="card" style="display:none">
       <h2>Host PIN</h2>
       <p class="muted" id="pinLine"></p>
       <button class="btn sec" id="setPin">Set / change host PIN</button>
@@ -113,11 +118,11 @@
       <div class="row" style="margin-top:6px"><button class="btn sec qadd" data-l="Improvers">+ Improvers</button><button class="btn sec qadd" data-l="Intermediate">+ Intermediate</button></div>
     </div>
     <div class="card">
-      <h2>Players &amp; ratings <span class="muted" id="countLine"></span></h2>
+      <h2>Players <span class="muted" id="countLine"></span></h2>
       <table id="playerTable"></table>
-      <p class="muted">Tap a name to mark them away/back. ★ = skill within their level (keeps games balanced, fills the top court). Only visible here.</p>
+      <p class="muted">Tap a name to mark them away/back. ⇄ switches level, ✕ removes.</p>
     </div>
-    <div class="card">
+    <div class="card" style="display:none">
       <h2>Everyone's preferences</h2>
       <p class="muted">👍 = likes playing with (paired more often). 👎 = would rather not (never partners, kept apart where possible). 🔒 = the player locked it with their own PIN.</p>
       <label>Whose preferences?</label>
@@ -507,10 +512,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&
 
 let hostOpen = false;
 function goTab(t){
-  if (t==='host' && !hostOpen) {
-    if (S.pin) { const v = prompt('Host PIN'); if (v===null) return; if (v!==S.pin) return alert('Wrong PIN.'); }
-    hostOpen = true;
-  }
+  if (t==='host') hostOpen = true;
   if (t!=='host') hostOpen = false;          // leaving Host locks it again
   document.querySelectorAll('nav button[data-tab]').forEach(x=>x.classList.toggle('on', x.dataset.tab===t));
   document.querySelectorAll('section').forEach(x=>x.classList.toggle('on', x.id===t));
@@ -555,7 +557,7 @@ $('#setupLoad').onclick=()=>{
 document.querySelectorAll('.qadd').forEach(b=>b.onclick=()=>{
   const name=$('#qName').value.trim(); if(!name) return $('#qName').focus();
   if (S.players.some(x=>x.name.toLowerCase()===name.toLowerCase())) return alert(name+' is already on the list.');
-  S.players.push(newPlayer({name, level:b.dataset.l, rating:3}, S.nextId++));
+  { const np=newPlayer({name, level:b.dataset.l, rating:3}, S.nextId++); np.notHere=true; S.players.push(np); }
   $('#qName').value=''; save(); render(); $('#qName').focus();
 });
 $('#addPlayers').onclick = () => {
@@ -714,10 +716,9 @@ function renderGames(){
 }
 function renderPlay(){
   S.live = S.live || {};
-  const ah = arrivalsHTML(); $('#arriveView').style.display = ah?'block':'none'; $('#arriveView').innerHTML = ah; wireArrivals(renderPlay);
-  const noneLive = !Object.values(S.live).some(Boolean) && !S.players.some(p=>(p.played||0)>0);
-  $('#startCheckin').style.display = (!ah && noneLive && S.players.length) ? 'block' : 'none';
-  $('#startCheckin').onclick = () => { S.players.forEach(p=>{ if(!p.away) p.notHere=true; }); save(); renderPlay(); };
+  $('#arriveView').style.display='none'; $('#startCheckin').style.display='none';
+  const waitN = S.players.filter(p=>p.notHere&&!p.away).length;
+  if (waitN) { $('#arriveView').style.display='block'; $('#arriveView').innerHTML=`<p class="muted" style="margin:0">${waitN} player(s) not checked in yet. Check them in on the <b>Check-in</b> tab.</p>`; }
   const by = id => S.players.find(p=>p.id===id);
   $('#courtsView').innerHTML = S.courts.map(c=>{
     const m = S.live[c.name];
@@ -913,7 +914,15 @@ function renderSimple(){
   $('#simpleList').innerHTML = LEVELS.map(L=>{const ps=here.filter(p=>p.level===L).map(p=>esc(p.name)).sort(); return ps.length?`<p><span class="pill ${L}">${L}</span> ${ps.join(', ')}</p>`:'';}).join('') || '<p class="muted">No players yet.</p>';
   $('#pinLine').textContent = S.pin ? 'A host PIN is set on this device. The Host tab asks for it.' : 'No PIN yet. Anyone can open the Host tab. Set a PIN to protect ratings and preferences.';
 }
-function render(){ renderCourts(); renderPlayers(); renderPlay(); renderSimple(); renderBoard(); }
+function renderCheckin(){
+  const ah = arrivalsHTML();
+  $('#checkinView').innerHTML = ah || `<h2>Check-in</h2><p class="muted">${S.players.length?'Everyone is checked in ✓':'No players yet. Add them below.'}</p>`;
+  wireArrivals(()=>{ renderCheckin(); renderPlayers(); });
+  const noneLive = !Object.values(S.live||{}).some(Boolean) && !S.players.some(p=>(p.played||0)>0);
+  $('#startCheckin2').style.display = (!ah && noneLive && S.players.length) ? 'block' : 'none';
+  $('#startCheckin2').onclick = () => { S.players.forEach(p=>{ if(!p.away) p.notHere=true; }); save(); renderCheckin(); };
+}
+function render(){ renderCheckin(); renderCourts(); renderPlayers(); renderPlay(); renderSimple(); renderBoard(); }
 render();
 </script>
 </body>
