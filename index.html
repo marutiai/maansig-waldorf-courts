@@ -72,6 +72,7 @@
       <label>How people sit out</label>
       <select id="mode">
         <option value="each">Mix it up: fewest games go on next</option>
+        <option value="stagger">Equal games: 2 stay on, 2 new come in</option>
         <option value="two">Same four for 2 games, then sit 2</option>
         <option value="ladder">Up &amp; down courts: winners up, losers down</option>
       </select>
@@ -519,9 +520,9 @@ function renderCourts(){
 $('#addCourt').onclick = () => { S.courts.push({name:'Court '+(S.courts.length+1), level:'Intermediate'}); save(); renderCourts(); };
 const MODE_HELP={each:'Whoever has played least goes on next, mixed so people meet new partners and opponents. 8 on a court = 4 play, 4 sit.',
  two:'The same four play 2 games in a row, then sit out for 2 while the next four play.',
- stagger:'Every game, 2 players stay on and 2 fresh players come in, so partners keep changing. Over each pair of games everyone plays the same amount.',
+ stagger:'Whoever has played fewer games always goes on first. When everyone is level, 2 players stay on from the last game and 2 new come in. E.g. 8 players: 1234, 5678, 12+56, 34+78, then new mixes.',
  ladder:'For 2+ courts of the same level. Enter the score: the winning pair moves up a court, the losing pair moves down (top winners stay, bottom losers swap with people waiting). Partners are split every game. Courts change together.'};
-function showModeHelp(){ if (S.mode==='stagger') { S.mode='each'; save(); $('#mode').value='each'; } $('#modeHelp').textContent = MODE_HELP[S.mode]||''; }
+function showModeHelp(){ $('#modeHelp').textContent = MODE_HELP[S.mode]||''; }
 $('#mode').onchange = e => { S.mode = e.target.value; if (S.mode==='ladder') S.sync = true; save(); renderCourts(); };
 $('#sync').onchange = e => { S.sync = e.target.checked; save(); };
 $('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; S.results=[]; S.ladder={}; pending=null; save(); render(); };
