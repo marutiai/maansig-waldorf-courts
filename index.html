@@ -152,6 +152,7 @@
       <p class="muted">Each court runs on its own. When a game ends, tap <b>Game finished</b> on that court and the next four step on. Change anyone with the name menus.</p>
     </div>
     <div id="arriveView" class="card" style="display:none"></div>
+    <button class="btn sec" id="startCheckin" style="display:none">✋ Start check-in (mark everyone as not arrived)</button>
     <div id="courtsView"></div>
     <div id="queueView" class="card" style="display:none"></div>
     <div id="countView" class="card" style="display:none"></div>
@@ -714,6 +715,9 @@ function renderGames(){
 function renderPlay(){
   S.live = S.live || {};
   const ah = arrivalsHTML(); $('#arriveView').style.display = ah?'block':'none'; $('#arriveView').innerHTML = ah; wireArrivals(renderPlay);
+  const noneLive = !Object.values(S.live).some(Boolean) && !S.players.some(p=>(p.played||0)>0);
+  $('#startCheckin').style.display = (!ah && noneLive && S.players.length) ? 'block' : 'none';
+  $('#startCheckin').onclick = () => { S.players.forEach(p=>{ if(!p.away) p.notHere=true; }); save(); renderPlay(); };
   const by = id => S.players.find(p=>p.id===id);
   $('#courtsView').innerHTML = S.courts.map(c=>{
     const m = S.live[c.name];
