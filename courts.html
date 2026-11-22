@@ -33,6 +33,10 @@ main{padding:12px;max-width:680px;margin:auto}
 .dot{width:9px;height:9px;border-radius:50%}
 .legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin:8px 0}
 .legend span{display:flex;align-items:center;gap:4px}
+.ev{font-size:10px;line-height:1.25;border-left:3px solid;padding-left:3px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell{min-height:70px;overflow:hidden}
+.view button{flex:1}
+.wk .day h2{font-size:15px}
 </style></head><body>
 <header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p></header>
 <main>
@@ -40,10 +44,11 @@ main{padding:12px;max-width:680px;margin:auto}
 <div class="chips">
   <button class="chip on" id="fits">Only 2+ courts, weekday eve / weekend</button>
 </div>
+<div class="chips view"><button class="chip" data-view="month">Month</button><button class="chip" data-view="week">Week</button></div>
 <div class="cal"><div class="calhead"><button id="prev">‹</button><b id="mlabel"></b><button id="next">›</button></div>
 <div class="legend" id="legend"></div>
 <div class="grid" id="grid"></div></div>
-<div id="list"><p class="muted">Tap a day to see the free slots.</p></div>
+<div id="list"></div>
 <p class="muted">Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days.</p>
 </main>
 <script>
@@ -51,32 +56,45 @@ const $=id=>document.getElementById(id);
 const COL={'Royal Docks':'#1f4e79','Bow School':'#7d3c98','Somers Town':'#1e8449',"George Green's":'#b9770e'};
 let D=[],venues=new Set(Object.keys(COL)),fits=true,month='all';
 fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{D=j.slots;$('upd').textContent='Updated '+j.updated;draw();});
-let ym=null,sel=null;
+let ym=null,view='month',wk=null;
+const ABBR={'Royal Docks':'RD','Bow School':'Bow','Somers Town':'ST',"George Green's":'GG'};
 function chips(){
   $('venues').innerHTML=Object.keys(COL).map(v=>`<button class="chip ${venues.has(v)?'on':''}" data-v="${v}">${v}</button>`).join('');
   document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{const v=b.dataset.v;venues.has(v)?venues.delete(v):venues.add(v);draw();});
   $('fits').className='chip '+(fits?'on':'');
-  $('legend').innerHTML=Object.keys(COL).filter(v=>venues.has(v)).map(v=>`<span><i class="dot" style="background:${COL[v]}"></i>${v}</span>`).join('');
+  document.querySelectorAll('[data-view]').forEach(b=>{b.className='chip '+(view===b.dataset.view?'on':'');b.onclick=()=>{view=b.dataset.view;draw();};});
+  $('legend').innerHTML=Object.keys(COL).filter(v=>venues.has(v)).map(v=>`<span><i class="dot" style="background:${COL[v]}"></i>${ABBR[v]} = ${v}</span>`).join('');
 }
 $('fits').onclick=()=>{fits=!fits;draw();};
-$('prev').onclick=()=>{ym=new Date(ym.getFullYear(),ym.getMonth()-1,1);draw();};
-$('next').onclick=()=>{ym=new Date(ym.getFullYear(),ym.getMonth()+1,1);draw();};
+$('prev').onclick=()=>{if(view==='month')ym=new Date(ym.getFullYear(),ym.getMonth()-1,1);else wk=new Date(wk.getTime()-7*864e5);draw();};
+$('next').onclick=()=>{if(view==='month')ym=new Date(ym.getFullYear(),ym.getMonth()+1,1);else wk=new Date(wk.getTime()+7*864e5);draw();};
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const short=t=>t.replace(/:00/g,'').replace(' (55 min)','');
 function draw(){
-  if(!ym){const t=new Date();ym=new Date(t.getFullYear(),t.getMonth(),1);}
+  const t=new Date();
+  if(!ym) ym=new Date(t.getFullYear(),t.getMonth(),1);
+  if(!wk){wk=new Date(t.getFullYear(),t.getMonth(),t.getDate());wk=new Date(wk.getTime()-((wk.getDay()+6)%7)*864e5);}
   chips();
   const rows=D.filter(s=>venues.has(s[2])&&(!fits||s[6]==='Yes'));
   const by={};rows.forEach(s=>(by[s[0]]=by[s[0]]||[]).push(s));
-  $('mlabel').textContent=ym.toLocaleString('en-GB',{month:'long',year:'numeric'});
-  const first=(ym.getDay()+6)%7, days=new Date(ym.getFullYear(),ym.getMonth()+1,0).getDate(), today=iso(new Date());
-  let h=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('');
-  for(let i=0;i<first;i++) h+='<div></div>';
-  for(let d=1;d<=days;d++){const k=iso(new Date(ym.getFullYear(),ym.getMonth(),d)),sl=by[k]||[];
-    const vs=[...new Set(sl.map(s=>s[2]))];
-    h+=`<div class="cell ${sl.length?'has':''} ${k===sel?'sel':''} ${k<today?'past':''}" data-d="${k}"><b>${d}</b><div class="dots">${vs.map(v=>`<i class="dot" style="background:${COL[v]}"></i>`).join('')}</div></div>`;}
-  $('grid').innerHTML=h;
-  document.querySelectorAll('.cell.has').forEach(c=>c.onclick=()=>{sel=c.dataset.d;draw();});
-  if(sel){const sl=by[sel]||[];const dt=new Date(sel);
-    $('list').innerHTML=`<div class="day"><h2>${dt.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'})}</h2>${sl.length?sl.map(s=>`<div class="slot"><b>${s[3]}</b><span class="v" style="color:${COL[s[2]]}">${s[2]}</span><span class="n ${s[4]>=3?'g':'a'}">${s[4]} court${s[4]>1?'s':''}</span></div>`).join(''):'<p class="muted">Nothing free for these filters.</p>'}</div>`;}
+  const today=iso(t);
+  if(view==='month'){
+    $('grid').style.display='grid';
+    $('mlabel').textContent=ym.toLocaleString('en-GB',{month:'long',year:'numeric'});
+    const first=(ym.getDay()+6)%7, days=new Date(ym.getFullYear(),ym.getMonth()+1,0).getDate();
+    let h=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('');
+    for(let i=0;i<first;i++) h+='<div></div>';
+    for(let d=1;d<=days;d++){const k=iso(new Date(ym.getFullYear(),ym.getMonth(),d)),sl=by[k]||[];
+      h+=`<div class="cell ${sl.length?'has':''} ${k<today?'past':''}"><b>${d}</b>${sl.map(s=>`<div class="ev" style="border-color:${COL[s[2]]}">${ABBR[s[2]]} ${short(s[3])} ×${s[4]}</div>`).join('')}</div>`;}
+    $('grid').innerHTML=h; $('list').innerHTML='';
+  } else {
+    $('grid').style.display='none';
+    const end=new Date(wk.getTime()+6*864e5);
+    $('mlabel').textContent=wk.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' – '+end.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    let h='';
+    for(let i=0;i<7;i++){const dt=new Date(wk.getTime()+i*864e5),k=iso(dt),sl=by[k]||[];
+      h+=`<div class="day ${k<today?'past':''}"><h2>${dt.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'})}</h2>${sl.length?sl.map(s=>`<div class="slot"><b>${s[3]}</b><span class="v" style="color:${COL[s[2]]}">${s[2]}</span><span class="n ${s[4]>=3?'g':'a'}">${s[4]} court${s[4]>1?'s':''}</span></div>`).join(''):'<p class="muted">Nothing free</p>'}</div>`;}
+    $('list').innerHTML='<div class="wk">'+h+'</div>';
+  }
 }
 </script></body></html>
