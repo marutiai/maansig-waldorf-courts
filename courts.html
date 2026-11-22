@@ -62,14 +62,14 @@ main{padding:10px;max-width:1100px;margin:auto}
 <div class="bar"><button id="prev">‹</button><b id="label"></b><button id="next">›</button></div>
 <div class="legend" id="legend"></div>
 <div id="view"></div>
-<p class="muted">Tap any day to open it. Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days.</p>
+<p class="muted">Tap any day to open it. Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days. In2Sports (Canary Wharf) is entered by hand from Maansi's list.</p>
 </main>
 <div id="dayModal"><div class="box"><h2><span id="dTitle"></span><button id="dClose">Close ✕</button></h2><div id="dGrid"></div><div id="dList" class="list"></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
 const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const COL={'Royal Docks':'#2e6fb7','Bow School':'#8e44ad','Somers Town':'#1e8449',"George Green's":'#d68910'};
-const AB={'Royal Docks':'RD','Bow School':'Bow','Somers Town':'ST',"George Green's":'GG'};
+const COL={'Royal Docks':'#2e6fb7','Bow School':'#8e44ad','Somers Town':'#1e8449',"George Green's":'#d68910','In2Sports':'#c0392b'};
+const AB={'Royal Docks':'RD','Bow School':'Bow','Somers Town':'ST',"George Green's":'GG','In2Sports':'In2'};
 const VS=Object.keys(COL);
 const H0=8,H1=22;              // timeline 08:00–22:00
 let G=[],ours=true,D=[],venues=new Set(VS),fits=true,dur=0,minC=2,view='month',cur=null;
@@ -82,7 +82,7 @@ const t12=m=>{let h=Math.floor(m/60),mm=m%60,ap=h>=12?'pm':'am';h=h%12||12;retur
 const fmt=m=>{const x=t12(m);return x.t+x.ap;};
 const rng=(a,b)=>{const x=t12(a),y=t12(b);return (x.ap===y.ap?x.t:x.t+x.ap)+'–'+y.t+y.ap;};
 const hlab=h=>{const x=t12(h*60);return x.t+x.ap;};
-fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{D=j.slots;G=j.games||[];$('upd').textContent='Updated '+j.updated;draw();});
+fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{D=j.slots.concat(j.manual||[]);G=j.games||[];$('upd').textContent='Updated '+j.updated;draw();});
 function merged(list){   // join back-to-back slots (gap ≤ 5 min) at the same venue; courts = fewest free across the run
   const g={}; list.forEach(s=>(g[s[0]+'|'+s[2]]=g[s[0]+'|'+s[2]]||[]).push(s)); const out=[];
   for (const k in g){ const a=g[k].map(s=>({s,r:span(s)})).sort((x,y)=>x.r[0]-y.r[0]); let c=null;
