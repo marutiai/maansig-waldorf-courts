@@ -120,7 +120,7 @@
     <div class="card">
       <h2>Players <span class="muted" id="countLine"></span></h2>
       <table id="playerTable"></table>
-      <p class="muted">Tap a name to mark them away/back. ⇄ switches level, ✕ removes.</p>
+      <p class="muted">Tap a name to mark them away/back. Pick a court to keep someone on that court only (📌), e.g. a beginner on Court 3. ⇄ switches level, ✕ removes.</p>
     </div>
     <div class="card" style="display:none">
       <h2>Everyone's preferences</h2>
@@ -412,7 +412,8 @@ function chooseFour(pool, rand){
 }
 
 function pickForCourt(state, court, rand){
-  const pool = freePool(state, court.level, court.name);
+  const ok = p => !p.court || p.court===court.name || !state.courts.some(c=>c.name===p.court && !c.off);  // pinned players only play on their court
+  const pool = freePool(state, court.level, court.name).filter(ok);
   if (pool.length < 4) return null;
   let pick = (state.mode === 'two' || state.mode === 'stagger') ? choosePlayers(pool, 4, state.mode, rand) : chooseFour(pool, rand);
   if (court.top) {   // top court: strongest of those due to play next
@@ -578,14 +579,16 @@ function renderPlayers(){
   $('#countLine').textContent = LEVELS.map(L=>`${L}: ${here.filter(p=>p.level===L).length}`).join(' · ');
   $('#playerTable').innerHTML = ps.map(p=>`
     <tr class="${p.away?'away':''}">
-      <td class="pname" data-id="${p.id}">${esc(p.name)}<br><span class="pill ${p.level}">${p.level}</span> <span class="tag">${p.games} games</span></td>
+      <td class="pname" data-id="${p.id}">${esc(p.name)}${p.court?` <span class="tag">📌 ${esc(p.court)}</span>`:''}<br><span class="pill ${p.level}">${p.level}</span> <span class="tag">${p.games} games</span></td>
       <td class="r stars">${[1,2,3,4,5].map(n=>`<button data-id="${p.id}" data-n="${n}" class="${n<=p.rating?'on':''}">★</button>`).join('')}</td>
-      <td class="r"><button class="btn small sec plev" data-id="${p.id}">⇄</button> <button class="btn small sec pdel" data-id="${p.id}">✕</button></td>
+      <td class="r"><select class="pcourt" data-id="${p.id}" style="width:auto;padding:4px;font-size:13px"><option value="">Any court</option>${S.courts.filter(c=>c.level===p.level).map(c=>`<option ${p.court===c.name?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+        <button class="btn small sec plev" data-id="${p.id}">⇄</button> <button class="btn small sec pdel" data-id="${p.id}">✕</button></td>
     </tr>`).join('') || '<tr><td class="muted">No players yet.</td></tr>';
   const by = id => S.players.find(p=>p.id==id);
   document.querySelectorAll('.pname').forEach(e=>e.onclick=()=>{ const p=by(e.dataset.id); p.away=!p.away; save(); renderPlayers(); });
   document.querySelectorAll('.stars button').forEach(e=>e.onclick=()=>{ by(e.dataset.id).rating=+e.dataset.n; save(); renderPlayers(); });
-  document.querySelectorAll('.plev').forEach(e=>e.onclick=()=>{ const p=by(e.dataset.id); p.level = p.level==='Improvers'?'Intermediate':'Improvers'; save(); renderPlayers(); });
+  document.querySelectorAll('.plev').forEach(e=>e.onclick=()=>{ const p=by(e.dataset.id); p.level = p.level==='Improvers'?'Intermediate':'Improvers'; p.court=''; save(); renderPlayers(); });
+  document.querySelectorAll('.pcourt').forEach(e=>e.onchange=()=>{ by(e.dataset.id).court = e.value; save(); renderPlayers(); });
   document.querySelectorAll('.pdel').forEach(e=>e.onclick=()=>{ if(!confirm('Remove '+by(e.dataset.id).name+'?'))return; S.players=S.players.filter(p=>p.id!=e.dataset.id); save(); renderPlayers(); });
   renderPrefs();
 }
@@ -674,7 +677,7 @@ function ladderFill(state, lvl){
     if (state.live[c.name]) return;
     const Q = state.ladderQ[c.name] = state.ladderQ[c.name] || [];
     if (i===cs.length-1) while (Q.length<2) {          // bottom court tops up from people waiting
-      const f = freePool(state, lvl).sort((a,b)=>a.games-b.games || b.satStreak-a.satStreak);
+      const f = freePool(state, lvl).filter(p=>!p.court || p.court===c.name).sort((a,b)=>a.games-b.games || b.satStreak-a.satStreak);
       if (f.length<2) break; Q.push([f[0].id, f[1].id]);
     }
     if (Q.length>=2) { const [x,y] = Q.splice(0,2); state.live[c.name] = { a:[x[0],y[0]], b:[x[1],y[1]] }; }  // partners split
