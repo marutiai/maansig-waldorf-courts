@@ -71,11 +71,12 @@
       <h2>Rotation</h2>
       <label>How people sit out</label>
       <select id="mode">
-        <option value="each">Fair queue: fewest games play next</option>
-        <option value="two">Play 2 games, then sit out</option>
-        <option value="stagger">Swap 2 each game: 2 stay, 2 new, everyone level</option>
+        <option value="each">Mix it up: fewest games go on next</option>
+        <option value="two">Same four for 2 games, then sit 2</option>
+        <option value="stagger">Swap 2 each game: 2 stay on, 2 come in</option>
+        <option value="ladder">Up &amp; down courts: winners up, losers down</option>
       </select>
-      <p class="muted">8 on a court = 4 play, 4 sit each game.</p>
+      <p class="muted" id="modeHelp"></p>
       <label style="margin-top:10px"><input type="checkbox" id="sync" style="width:auto"> <b>Courts change together</b> (best mixing): when a court finishes it waits for the other courts of its level, then everyone is reshuffled across all of them.</label>
     </div>
     <div class="card">
@@ -139,6 +140,7 @@
     <div id="courtsView"></div>
     <div id="queueView" class="card" style="display:none"></div>
     <div id="countView" class="card" style="display:none"></div>
+    <div id="boardView" class="card" style="display:none"></div>
     <div class="card">
       <h2>Late arrival</h2>
       <div class="row"><input id="lateName" placeholder="Name" style="flex:1.6"><select id="lateLevel"><option>Improvers</option><option>Intermediate</option></select></div>
@@ -343,6 +345,7 @@ function onCourtIds(state, except){
   for (const [c,m] of Object.entries(state.live||{})) if (m && c!==except) [...m.a,...m.b].forEach(id=>s.add(id));
   return s;
 }
+function activeCourts(state, level){ return state.courts.filter(c=>!c.off && (!level || c.level===level)); }
 function freePool(state, level, except){
   const busy = onCourtIds(state, except);
   return state.players.filter(p=>p.level===level && !p.away && !busy.has(p.id));
@@ -512,12 +515,17 @@ function renderCourts(){
   document.querySelectorAll('.clevel').forEach(e=>e.onchange=()=>{S.courts[e.dataset.i].level=e.value; save();});
   document.querySelectorAll('.ctop').forEach(e=>e.onchange=()=>{S.courts[e.dataset.i].top=e.checked; save();});
   document.querySelectorAll('.cdel').forEach(e=>e.onclick=()=>{S.courts.splice(e.dataset.i,1); save(); renderCourts();});
-  $('#mode').value = S.mode; $('#sync').checked = !!S.sync;
+  $('#mode').value = S.mode; $('#sync').checked = !!S.sync; showModeHelp();
 }
 $('#addCourt').onclick = () => { S.courts.push({name:'Court '+(S.courts.length+1), level:'Intermediate'}); save(); renderCourts(); };
-$('#mode').onchange = e => { S.mode = e.target.value; save(); };
+const MODE_HELP={each:'Whoever has played least goes on next, mixed so people meet new partners and opponents. 8 on a court = 4 play, 4 sit.',
+ two:'The same four play 2 games in a row, then sit out for 2 while the next four play.',
+ stagger:'Every game, 2 players stay on and 2 fresh players come in, so partners keep changing. Over each pair of games everyone plays the same amount.',
+ ladder:'For 2+ courts of the same level. Enter the score: the winning pair moves up a court, the losing pair moves down (top winners stay, bottom losers swap with people waiting). Partners are split every game. Courts change together.'};
+function showModeHelp(){ $('#modeHelp').textContent = MODE_HELP[S.mode]||''; }
+$('#mode').onchange = e => { S.mode = e.target.value; if (S.mode==='ladder') S.sync = true; save(); renderCourts(); };
 $('#sync').onchange = e => { S.sync = e.target.checked; save(); };
-$('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; pending=null; save(); render(); };
+$('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; S.results=[]; S.ladder={}; pending=null; save(); render(); };
 $('#clearAll').onclick = () => { if (!confirm('Remove all players and courts?')) return; localStorage.removeItem(KEY); S = load(); pending=null; render(); };
 
 $('#addPlayers').onclick = () => {
@@ -599,6 +607,69 @@ function renderPrefs(){
   });
 }
 
+// ---- Scores, leaderboard, up & down courts ----
+function recordResult(state, cn, sa, sb){
+  const m = state.live[cn]; if (!m || sa==null || sb==null || isNaN(sa) || isNaN(sb)) return null;
+  const court = state.courts.find(c=>c.name===cn);
+  const r = { a:[...m.a], b:[...m.b], sa, sb, court:cn, level:court?court.level:'', t:Date.now() };
+  (state.results = state.results || []).push(r);
+  return r;
+}
+function ladderNext(state, level){
+  const cs = activeCourts(state, level), L = (state.ladder||{})[level] || {};
+  if (!cs.every(c=>L[c.name])) return false;
+  const by = id => state.players.find(p=>p.id===id);
+  const n = cs.length, inc = cs.map(()=>[]);
+  const bench = [];
+  cs.forEach((c,i)=>{ const r=L[c.name];
+    inc[Math.max(0,i-1)].push(r.win);
+    if (i===n-1) bench.push(...r.lose); else inc[i+1].push(r.lose); });
+  const onLadder = new Set(cs.flatMap(c=>[...L[c.name].win, ...L[c.name].lose]));
+  const waiting = freePool(state, level).filter(p=>!onLadder.has(p.id))
+                   .sort((a,b)=>a.games-b.games || b.satStreak-a.satStreak).map(p=>p.id);
+  // people waiting go on before the bottom-court losers; losers fill in only if short
+  const pool = waiting.concat(bench);
+  for (let i=0;i<n;i++) while (inc[i].length<2) { const two = pool.splice(0,2); if (two.length<2) return false; inc[i].push(two); }
+  cs.forEach((c,i)=>{ const [x,y] = inc[i];        // split partners: one from each pair on each side
+    state.live[c.name] = { a:[x[0],y[0]], b:[x[1],y[1]] }; });
+  state.ladder[level] = {};
+  return true;
+}
+function leaderboard(state){
+  const P={}, T={};
+  for (const r of state.results||[]) {
+    const win = r.sa>r.sb ? 'a' : r.sb>r.sa ? 'b' : null;
+    for (const side of ['a','b']) {
+      const pf = side==='a'?r.sa:r.sb, pa = side==='a'?r.sb:r.sa, w = win===side;
+      for (const id of r[side]) { const x=P[id]=P[id]||{id,g:0,w:0,pf:0,pa:0}; x.g++; x.w+=w?1:0; x.pf+=pf; x.pa+=pa; }
+      const k=[...r[side]].sort((p,q)=>p-q).join('-'); const t=T[k]=T[k]||{ids:r[side],g:0,w:0,pf:0,pa:0};
+      t.g++; t.w+=w?1:0; t.pf+=pf; t.pa+=pa;
+    }
+  }
+  const rank = a => a.sort((x,y)=> (y.w/y.g)-(x.w/x.g) || y.w-x.w || (y.pf-y.pa)-(x.pf-x.pa));
+  return { players: rank(Object.values(P)), pairs: rank(Object.values(T).filter(t=>t.g>=2)) };
+}
+function renderBoard(){
+  const by = id => S.players.find(p=>p.id===id), nm = id => esc((by(id)||{name:'?'}).name);
+  const lb = leaderboard(S);
+  if (!lb.players.length) { $('#boardView').style.display='none'; return; }
+  $('#boardView').style.display='block';
+  const row = (x,i,names) => `<tr><td>${i+1}. ${names}</td><td class="r">${x.w}/${x.g} won</td><td class="r">${x.pf-x.pa>=0?'+':''}${x.pf-x.pa}</td></tr>`;
+  $('#boardView').innerHTML = `<h2>🏆 Leaderboard</h2>
+    <p class="muted">Win rate first, then wins, then points difference. Only games with a score count.</p>
+    <table>${lb.players.slice(0,15).map((x,i)=>row(x,i,nm(x.id)+` <span class="pill ${(by(x.id)||{}).level||''}">${((by(x.id)||{}).level||'').slice(0,3)}</span>`)).join('')}</table>
+    ${lb.pairs.length?`<h2 style="margin-top:12px">🤝 Best partners</h2><p class="muted">Pairs who played 2+ games together.</p><table>${lb.pairs.slice(0,5).map((t,i)=>row(t,i,t.ids.map(nm).join(' &amp; '))).join('')}</table>`:''}
+    <button class="btn sec" id="copyBoard">📋 Copy results to share</button>
+    <button class="btn sec" id="undoScore">Undo last score</button>`;
+  $('#copyBoard').onclick = async () => {
+    const lb2 = leaderboard(S), best = lb2.players[0], pair = lb2.pairs[0];
+    const txt = '🏸 Today\'s results\n'+ (best?`⭐ Player of the day: ${by(best.id).name} (${best.w}/${best.g} won)\n`:'') +
+      (pair?`🤝 Best pair: ${pair.ids.map(id=>by(id).name).join(' & ')} (${pair.w}/${pair.g} won)\n`:'') + '\nTop 5:\n' +
+      lb2.players.slice(0,5).map((x,i)=>`${i+1}. ${by(x.id).name}: ${x.w}/${x.g} won, ${x.pf-x.pa>=0?'+':''}${x.pf-x.pa}`).join('\n');
+    try { await navigator.clipboard.writeText(txt); alert('Copied! Paste it into WhatsApp.'); } catch(e) { prompt('Copy this:', txt); }
+  };
+  $('#undoScore').onclick = () => { if (confirm('Remove the last score entered? (Games-played counts stay.)')) { S.results.pop(); save(); renderBoard(); } };
+}
 function renderPlay(){
   S.live = S.live || {};
   const by = id => S.players.find(p=>p.id===id);
@@ -609,13 +680,18 @@ function renderPlay(){
       return cands.map(p=>`<option value="${p.id}" ${p.id===id?'selected':''}>${esc(p.name)}</option>`).join('');
     };
     const slot = (id,t,i) => `<select class="slot" data-c="${esc(c.name)}" data-t="${t}" data-i="${i}">${opts(id)}</select>`;
+    if (c.off) return `<div class="card court ${c.level}" style="opacity:.55"><div class="row"><b>${esc(c.name)}</b><span style="text-align:right">Closed</span></div><button class="btn sec copen" data-c="${esc(c.name)}">Reopen court</button></div>`;
+    const lad = S.mode==='ladder';
     return `<div class="card court ${c.level}">
       <div class="row"><b>${esc(c.name)}</b><span style="text-align:right"><span class="pill ${c.level}">${c.level}${c.top?' · Top':''}</span></span></div>
       ${m ? `<div class="match"><div class="t">${slot(m.a[0],'a',0)}${slot(m.a[1],'a',1)}</div><div class="vs">vs</div><div class="t">${slot(m.b[0],'b',0)}${slot(m.b[1],'b',1)}</div></div>
-        <div class="row"><button class="btn sec reroll" data-c="${esc(c.name)}">Reshuffle</button><button class="btn finish" data-c="${esc(c.name)}">Game finished ✓</button></div>`
+        <div class="row" style="align-items:center"><input type="number" inputmode="numeric" class="sc" data-c="${esc(c.name)}" data-t="a" placeholder="Score" style="text-align:center"><span style="flex:0;padding:0 6px">–</span><input type="number" inputmode="numeric" class="sc" data-c="${esc(c.name)}" data-t="b" placeholder="Score" style="text-align:center"></div>
+        <p class="muted" style="margin:2px 0 6px">${lad?'Score needed: winners move up, losers move down.':'Score optional, for the leaderboard.'}</p>
+        <div class="row"><button class="btn sec reroll" data-c="${esc(c.name)}">Reshuffle</button><button class="btn finish" data-c="${esc(c.name)}">Game finished ✓</button></div>
+        <button class="btn small sec cclose" data-c="${esc(c.name)}" style="margin-top:6px">Close this court</button>`
           : (S.sync && (S.waiting||{})[c.name])
             ? `<p class="muted">✓ Finished. Waiting for the other ${c.level} court(s) to finish, then everyone is reshuffled.</p><button class="btn sec startc" data-c="${esc(c.name)}">Don't wait, start now</button>`
-            : `<p class="muted">Empty. Not enough free players at this level, or not started.</p><button class="btn sec startc" data-c="${esc(c.name)}">Start this court</button>`}
+            : `<p class="muted">Empty. Not enough free players at this level, or not started.</p><button class="btn sec startc" data-c="${esc(c.name)}">Start this court</button><button class="btn small sec cclose" data-c="${esc(c.name)}" style="margin-top:6px">Close this court</button>`}
     </div>`;}).join('') || '<div class="card muted">Add courts in Setup first.</div>';
   document.querySelectorAll('.slot').forEach(e=>e.onchange=()=>{
     const m = S.live[e.dataset.c]; const newId = +e.value; const oldId = m[e.dataset.t][+e.dataset.i];
@@ -625,17 +701,37 @@ function renderPlay(){
   const court = n => S.courts.find(c=>c.name===n);
   document.querySelectorAll('.finish').forEach(e=>e.onclick=()=>{
     const cn = e.dataset.c, lvl = court(cn).level;
+    const v = t => { const el=[...document.querySelectorAll('.sc')].find(x=>x.dataset.c===cn&&x.dataset.t===t); return el&&el.value!==''?+el.value:null; };
+    const sa=v('a'), sb=v('b'), m=S.live[cn];
+    if (S.mode==='ladder' && (sa==null || sb==null || sa===sb)) return alert('Enter the score (no draws) so we know who moves up.');
+    if ((sa==null)!==(sb==null)) return alert('Enter both scores, or leave both empty.');
+    if (sa!=null) recordResult(S, cn, sa, sb);
+    if (S.mode==='ladder') {
+      S.ladder = S.ladder||{}; S.ladder[lvl] = S.ladder[lvl]||{};
+      S.ladder[lvl][cn] = sa>sb ? {win:[...m.a], lose:[...m.b]} : {win:[...m.b], lose:[...m.a]};
+      finishCourt(S, cn, false); S.waiting = S.waiting || {}; S.waiting[cn] = true;
+      if (activeCourts(S,lvl).every(c=>!S.live[c.name])) {
+        if (ladderNext(S, lvl)) activeCourts(S,lvl).forEach(c=>S.waiting[c.name]=false);
+        else { for (const c of activeCourts(S,lvl)) { S.waiting[c.name]=false; S.live[c.name]=pickForCourt(S,c); } S.ladder[lvl]={}; }
+      }
+      save(); renderPlay(); return;
+    }
     if (!S.sync) { finishCourt(S, cn); save(); renderPlay(); return; }
     finishCourt(S, cn, false); S.waiting = S.waiting || {}; S.waiting[cn] = true;
-    const same = S.courts.filter(c=>c.level===lvl);
+    const same = activeCourts(S, lvl);
     if (same.every(c=>!S.live[c.name])) {            // all courts of this level done: reshuffle together
       for (const c of same) { S.waiting[c.name] = false; S.live[c.name] = pickForCourt(S, c); }
     }
     save(); renderPlay();
   });
+  document.querySelectorAll('.cclose').forEach(e=>e.onclick=()=>{ const c=court(e.dataset.c);
+    if (S.live[c.name] && !confirm('Close '+c.name+'? The game on it now won\'t be counted. Games-played counts are kept.')) return;
+    c.off=true; S.live[c.name]=null; if (S.waiting) S.waiting[c.name]=false; if (S.ladder&&S.ladder[c.level]) delete S.ladder[c.level][c.name]; save(); renderPlay(); });
+  document.querySelectorAll('.copen').forEach(e=>e.onclick=()=>{ const c=court(e.dataset.c); c.off=false; save(); renderPlay(); });
   document.querySelectorAll('.reroll').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=null; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); save(); renderPlay(); });
   document.querySelectorAll('.startc').forEach(e=>e.onclick=()=>{ if (S.waiting) S.waiting[e.dataset.c]=false; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); if(!S.live[e.dataset.c]) alert('Need 4 free players at this level.'); save(); renderPlay(); });
-  const qs = LEVELS.map(L=>{ if(!S.courts.some(c=>c.level===L)) return ''; const q=queueFor(S,L); return q.length?`<p><span class="pill ${L}">${L}</span> ${q.map((p,i)=>`<span class="qn" data-id="${p.id}">${i+1}. ${esc(p.name)}</span> <span class="tag">(${p.games})</span>`).join(' · ')}</p>`:''; }).join('');
+  renderBoard();
+  const qs = LEVELS.map(L=>{ if(!activeCourts(S,L).length) return ''; const q=queueFor(S,L); return q.length?`<p><span class="pill ${L}">${L}</span> ${q.map((p,i)=>`<span class="qn" data-id="${p.id}">${i+1}. ${esc(p.name)}</span> <span class="tag">(${p.games})</span>`).join(' · ')}</p>`:''; }).join('');
   $('#queueView').style.display = qs ? 'block' : 'none';
   $('#queueView').innerHTML = `<h2>Up next</h2>${qs}<p class="muted">Order for the next free spot. (Games played in brackets.) Tap a name if they've left.</p>`;
   // Games played so far (real games only; late arrivals' catch-up credit isn't counted)
@@ -655,7 +751,7 @@ function renderPlay(){
 $('#fillCourts').onclick = () => {
   if (!S.courts.length) return alert('Add a court in Setup first.');
   S.live = S.live || {}; let n=0;
-  for (const c of S.courts) if (!S.live[c.name]) { S.live[c.name] = pickForCourt(S, c); if (S.live[c.name]) n++; }
+  for (const c of activeCourts(S)) if (!S.live[c.name]) { S.live[c.name] = pickForCourt(S, c); if (S.live[c.name]) n++; }
   if (!n) alert('No empty court could be filled (need 4 free players at that level).');
   save(); renderPlay();
 };
