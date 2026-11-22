@@ -105,6 +105,9 @@
       <label>Paste one per line: <b>Name, Level</b> (Imp / Int)</label>
       <textarea id="paste" placeholder="Alex Smith, Int&#10;Sam Lee, Imp&#10;Jo, Imp, 4"></textarea>
       <button class="btn" id="addPlayers">Add players</button>
+      <p class="muted" style="margin-top:12px"><b>Got a setup link from MarutiAI?</b> Copy it, paste it here and tap Load.</p>
+      <input id="setupPaste" placeholder="Paste setup link" autocomplete="off">
+      <button class="btn sec" id="setupLoad">Load setup link</button>
       <p class="muted" style="margin-top:12px"><b>Or add one at a time:</b> type the name and tap the level.</p>
       <input id="qName" placeholder="Name" autocomplete="off">
       <div class="row" style="margin-top:6px"><button class="btn sec qadd" data-l="Improvers">+ Improvers</button><button class="btn sec qadd" data-l="Intermediate">+ Intermediate</button></div>
@@ -537,6 +540,15 @@ $('#sync').onchange = e => { S.sync = e.target.checked; save(); };
 $('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; S.results=[]; S.ladder={}; pending=null; save(); render(); };
 $('#clearAll').onclick = () => { if (!confirm('Remove all players and courts?')) return; localStorage.removeItem(KEY); S = load(); pending=null; render(); };
 
+$('#setupLoad').onclick=()=>{
+  const v=$('#setupPaste').value.trim(); const i=v.indexOf('#setup='); if(i<0) return alert('That doesn\'t look like a setup link.');
+  let P; try { P=JSON.parse(decodeURIComponent(escape(atob(v.slice(i+7).replace(/-/g,'+').replace(/_/g,'/'))))); } catch(e) { return alert('That setup link looks broken.'); }
+  if (S.players.length && !confirm(`Load the player list for ${P.tag}? This replaces the current players and courts.`)) return;
+  S.players=[]; S.nextId=1; S.roundNo=0; S.current=null; S.live={}; S.results=[]; S.ladder={};
+  for (const p of P.players) S.players.push(newPlayer(p, S.nextId++));
+  if (P.courts) S.courts=P.courts; if (P.sync!==undefined) S.sync=P.sync; S.preloadTag=P.tag;
+  $('#setupPaste').value=''; save(); render(); alert('Loaded '+P.players.length+' players.');
+};
 document.querySelectorAll('.qadd').forEach(b=>b.onclick=()=>{
   const name=$('#qName').value.trim(); if(!name) return $('#qName').focus();
   if (S.players.some(x=>x.name.toLowerCase()===name.toLowerCase())) return alert(name+' is already on the list.');
