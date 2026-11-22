@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Waldorf Drafts">
+<meta name="theme-color" content="#1c4d5c">
+<title>Waldorf Drafts (demo)</title>
+<style>
+  :root { --teal:#1c4d5c; --bg:#f6f8f9; --ink:#1d2327; --mut:#6b7780; --send:#1f9d55; --skip:#d64545; --edit:#3b82c4; --later:#d69e2e; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); overflow:hidden; overscroll-behavior:none; }
+  header { background:var(--teal); color:#fff; padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top)); display:flex; justify-content:space-between; align-items:center; }
+  header h1 { font-size:18px; margin:0; }
+  header span { font-size:13px; opacity:.85; }
+  .demo { background:#fff6d6; color:#7a5b00; font-size:13px; text-align:center; padding:6px 10px; }
+  .stage { position:relative; height:calc(100% - 170px); margin:14px; }
+  .card { position:absolute; inset:0; background:#fff; border-radius:18px; box-shadow:0 4px 18px rgba(0,0,0,.12); padding:18px; display:flex; flex-direction:column; touch-action:none; user-select:none; transition:transform .25s ease, opacity .25s ease; }
+  .card.dragging { transition:none; }
+  .card .who { font-size:20px; font-weight:700; }
+  .card .num { color:var(--mut); font-size:13px; margin-top:2px; }
+  .card .tag { display:inline-block; margin-top:8px; font-size:12px; font-weight:600; border-radius:10px; padding:2px 8px; background:#d9ebee; color:var(--teal); }
+  .card .lbl { font-size:12px; font-weight:700; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; margin-top:16px; }
+  .card .in { font-style:italic; font-weight:600; font-size:16px; margin-top:6px; }
+  .card .draft { white-space:pre-wrap; background:#f1f6f7; border-radius:12px; padding:12px; margin-top:6px; font-size:16px; line-height:1.35; flex:1; overflow:auto; }
+  .card textarea { flex:1; font:inherit; font-size:16px; border:2px solid var(--edit); border-radius:12px; padding:12px; margin-top:6px; resize:none; }
+  .stamp { position:absolute; top:22px; padding:6px 12px; border:3px solid; border-radius:10px; font-weight:800; font-size:22px; opacity:0; transform:rotate(-12deg); }
+  .stamp.send { right:18px; color:var(--send); border-color:var(--send); }
+  .stamp.skip { left:18px; color:var(--skip); border-color:var(--skip); transform:rotate(12deg); }
+  .stamp.edit { left:50%; top:auto; bottom:22px; margin-left:-40px; color:var(--edit); border-color:var(--edit); transform:none; }
+  .stamp.later { left:50%; margin-left:-46px; color:var(--later); border-color:var(--later); transform:none; }
+  .bar { position:fixed; left:0; right:0; bottom:0; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); display:flex; gap:8px; background:var(--bg); }
+  .bar button { flex:1; border:none; border-radius:12px; padding:12px 0; font-size:15px; font-weight:700; color:#fff; }
+  .b-skip { background:var(--skip); } .b-later { background:var(--later); } .b-edit { background:var(--edit); } .b-send { background:var(--send); }
+  .done { text-align:center; padding:30px 20px; }
+  .done h2 { color:var(--teal); }
+  .log { text-align:left; background:#fff; border-radius:12px; padding:12px 14px; font-size:14px; line-height:1.6; }
+  .hint { text-align:center; color:var(--mut); font-size:12px; margin-top:-6px; }
+</style>
+</head>
+<body>
+<header><h1>Waldorf Drafts</h1><span id="count"></span></header>
+<div class="demo">DEMO with made-up names. Nothing is sent from this page.</div>
+<div class="stage" id="stage"></div>
+<div class="hint" id="hint">→ send · ← skip · ↑ edit · ↓ later</div>
+<div class="bar" id="bar">
+  <button class="b-skip" onclick="act('skip')">✕ Skip</button>
+  <button class="b-later" onclick="act('later')">⏰ Later</button>
+  <button class="b-edit" onclick="act('edit')">✎ Edit</button>
+  <button class="b-send" onclick="act('send')">✓ Send</button>
+</div>
+<script>
+const drafts = [
+  { who:"Alex (demo)", num:"+44 7000 000001", tag:"Football · Sat 28/11", msg:"Yeah Saturday works for me!", draft:"https://www.meetup.com/waldorflondon/events/...\n\nPlease go through the description on this link for all the details and select attend!" },
+  { who:"Priya (demo)", num:"+44 7000 000002", tag:"Badminton · new lead", msg:"How much is it per session?", draft:"We have 1 hour sessions for badminton for 10 pounds/person and 2 hour sessions for 14 pounds. Which one do you prefer?" },
+  { who:"Sam (demo)", num:"+44 7000 000003", tag:"Badminton · Wed 25/11", msg:"Done, paid!", draft:"Perfect, thank you Sam!\n\nSee you Wednesday :)" },
+  { who:"Jordan (demo)", num:"+44 7000 000004", tag:"Can't come", msg:"Sorry, I'm away next week", draft:"No worries Jordan!\n\nLet me know whenever you're back and I'll send you the next games :)" },
+];
+let i = 0; const log = [];
+const stage = document.getElementById('stage');
+function render() {
+  document.getElementById('count').textContent = i < drafts.length ? `${i+1} / ${drafts.length}` : 'All done';
+  stage.innerHTML = '';
+  if (i >= drafts.length) { finish(); return; }
+  const d = drafts[i];
+  const c = document.createElement('div'); c.className = 'card';
+  c.innerHTML = `<div class="stamp send">SEND</div><div class="stamp skip">SKIP</div><div class="stamp edit">EDIT</div><div class="stamp later">LATER</div>
+    <div class="who">${d.who}</div><div class="num">${d.num}</div><div><span class="tag">${d.tag}</span></div>
+    <div class="lbl">📩 They said</div><div class="in">"${d.msg}"</div>
+    <div class="lbl">Draft reply</div><div class="draft">${d.draft.replace(/</g,'&lt;')}</div>`;
+  stage.appendChild(c); drag(c);
+}
+function drag(c) {
+  let sx=0, sy=0, dx=0, dy=0, on=false;
+  const st = k => c.querySelector('.stamp.'+k);
+  c.addEventListener('pointerdown', e => { if (e.target.tagName==='TEXTAREA') return; on=true; sx=e.clientX; sy=e.clientY; c.classList.add('dragging'); c.setPointerCapture(e.pointerId); });
+  c.addEventListener('pointermove', e => { if(!on) return; dx=e.clientX-sx; dy=e.clientY-sy;
+    c.style.transform=`translate(${dx}px,${dy}px) rotate(${dx/20}deg)`;
+    const h=Math.abs(dx)>Math.abs(dy);
+    st('send').style.opacity = h&&dx>0 ? Math.min(dx/100,1) : 0;
+    st('skip').style.opacity = h&&dx<0 ? Math.min(-dx/100,1) : 0;
+    st('edit').style.opacity = !h&&dy<0 ? Math.min(-dy/100,1) : 0;
+    st('later').style.opacity = !h&&dy>0 ? Math.min(dy/100,1) : 0; });
+  const end = () => { if(!on) return; on=false; c.classList.remove('dragging');
+    const h=Math.abs(dx)>Math.abs(dy), t=110;
+    if (h&&dx>t) act('send'); else if (h&&dx<-t) act('skip'); else if (!h&&dy<-t) act('edit'); else if (!h&&dy>t) act('later');
+    else { c.style.transform=''; c.querySelectorAll('.stamp').forEach(s=>s.style.opacity=0); }
+    dx=dy=0; };
+  c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+}
+function fly(c, x, y) { c.style.transform=`translate(${x}px,${y}px) rotate(${x/20}deg)`; c.style.opacity=0; }
+function act(kind) {
+  const c = stage.querySelector('.card'); if (!c) return; const d = drafts[i];
+  if (kind==='edit') {
+    if (c.dataset.editing) { d.draft = c.querySelector('textarea').value; kind='send'; }
+    else { c.style.transform=''; c.querySelectorAll('.stamp').forEach(s=>s.style.opacity=0);
+      const box=c.querySelector('.draft'); const ta=document.createElement('textarea'); ta.value=d.draft; box.replaceWith(ta); ta.focus();
+      c.dataset.editing='1'; document.querySelector('.b-edit').textContent='✓ Save & send'; return; }
+  }
+  document.querySelector('.b-edit').textContent='✎ Edit';
+  log.push({ who:d.who, kind, text:d.draft });
+  const W=window.innerWidth, H=window.innerHeight;
+  fly(c, kind==='send'?W:kind==='skip'?-W:0, kind==='later'?H:kind==='edit'?-H:0);
+  setTimeout(()=>{ i++; render(); }, 220);
+}
+function finish() {
+  document.getElementById('bar').style.display='none'; document.getElementById('hint').style.display='none';
+  const icon = {send:'✅ Send', skip:'✕ Skip', later:'⏰ Later'};
+  stage.innerHTML = `<div class="done"><h2>All caught up 🪷</h2><div class="log">${log.map(l=>`<b>${icon[l.kind]||l.kind}</b> · ${l.who}`).join('<br>')}</div>
+  <p class="muted" style="color:var(--mut);font-size:13px">In the real version, these choices would go back to MarutiAI to send. This demo sends nothing.</p>
+  <button class="b-send" style="border:none;border-radius:12px;padding:12px 20px;color:#fff;font-weight:700" onclick="location.reload()">Try again</button></div>`;
+}
+render();
+</script>
+</body>
+</html>
