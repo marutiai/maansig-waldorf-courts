@@ -42,7 +42,9 @@ main{padding:12px;max-width:680px;margin:auto}
 <main>
 <div class="chips" id="venues"></div>
 <div class="chips">
-  <button class="chip on" id="fits">Only 2+ courts, weekday eve / weekend</button>
+  <button class="chip on" id="fits">Weekday evenings / weekends only</button>
+</div>
+<div class="chips" id="minc">
 </div>
 <div class="chips view"><button class="chip" data-view="month">Month</button><button class="chip" data-view="week">Week</button></div>
 <div class="cal"><div class="calhead"><button id="prev">‹</button><b id="mlabel"></b><button id="next">›</button></div>
@@ -56,12 +58,14 @@ const $=id=>document.getElementById(id);
 const COL={'Royal Docks':'#1f4e79','Bow School':'#7d3c98','Somers Town':'#1e8449',"George Green's":'#b9770e'};
 let D=[],venues=new Set(Object.keys(COL)),fits=true,month='all';
 fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{D=j.slots;$('upd').textContent='Updated '+j.updated;draw();});
-let ym=null,view='month',wk=null;
+let ym=null,view='month',wk=null,minC=2;
 const ABBR={'Royal Docks':'RD','Bow School':'Bow','Somers Town':'ST',"George Green's":'GG'};
 function chips(){
   $('venues').innerHTML=Object.keys(COL).map(v=>`<button class="chip ${venues.has(v)?'on':''}" data-v="${v}">${v}</button>`).join('');
   document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{const v=b.dataset.v;venues.has(v)?venues.delete(v):venues.add(v);draw();});
   $('fits').className='chip '+(fits?'on':'');
+  $('minc').innerHTML='<span class="muted" style="align-self:center">Min courts:</span>'+[1,2,3,4,5,6].map(n=>`<button class="chip ${minC===n?'on':''}" data-c="${n}">${n}+</button>`).join('');
+  document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{minC=+b.dataset.c;draw();});
   document.querySelectorAll('[data-view]').forEach(b=>{b.className='chip '+(view===b.dataset.view?'on':'');b.onclick=()=>{view=b.dataset.view;draw();};});
   $('legend').innerHTML=Object.keys(COL).filter(v=>venues.has(v)).map(v=>`<span><i class="dot" style="background:${COL[v]}"></i>${ABBR[v]} = ${v}</span>`).join('');
 }
@@ -75,7 +79,8 @@ function draw(){
   if(!ym) ym=new Date(t.getFullYear(),t.getMonth(),1);
   if(!wk){wk=new Date(t.getFullYear(),t.getMonth(),t.getDate());wk=new Date(wk.getTime()-((wk.getDay()+6)%7)*864e5);}
   chips();
-  const rows=D.filter(s=>venues.has(s[2])&&(!fits||s[6]==='Yes'));
+  const timeOk=s=>{const wkend=['Sat','Sun'].includes(s[1]);if(wkend)return true;const st=s[3].slice(0,5),en=(s[3].split('-')[1]||'').slice(0,5);return s[2]==="George Green's"?st>='19:00':en>'19:30';};
+  const rows=D.filter(s=>venues.has(s[2])&&s[4]>=minC&&(!fits||timeOk(s)));
   const by={};rows.forEach(s=>(by[s[0]]=by[s[0]]||[]).push(s));
   const today=iso(t);
   if(view==='month'){
