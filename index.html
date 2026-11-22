@@ -366,8 +366,9 @@ function onCourtIds(state, except){
   return s;
 }
 function activeCourts(state, level){ return state.courts.filter(c=>!c.off && (!level || c.level===level)); }
+function queuedIds(state){ return new Set(Object.values(state.ladderQ||{}).flat(2)); }
 function freePool(state, level, except){
-  const busy = onCourtIds(state, except);
+  const busy = onCourtIds(state, except); for (const id of queuedIds(state)) busy.add(id);
   return state.players.filter(p=>p.level===level && !p.away && !p.notHere && !busy.has(p.id));
 }
 // Pick 4 for one court in fair-queue mode, mixing groups for variety.
@@ -538,11 +539,11 @@ $('#addCourt').onclick = () => { S.courts.push({name:'Court '+(S.courts.length+1
 const MODE_HELP={each:'Whoever has played least goes on next, mixed so people meet new partners and opponents. 8 on a court = 4 play, 4 sit.',
  two:'The same four play 2 games in a row, then sit out for 2 while the next four play.',
  stagger:'Whoever has played fewer games always goes on first. When everyone is level, 2 players stay on from the last game and 2 new come in. E.g. 8 players: 1234, 5678, 12+56, 34+78, then new mixes.',
- ladder:'For 2+ courts of the same level. Enter the score: the winning pair moves up a court, the losing pair moves down (top winners stay, bottom losers swap with people waiting). Partners are split every game. Courts change together.'};
+ ladder:'For 2+ courts of the same level. Enter the score: the winning pair moves up a court, the losing pair moves down (top winners stay, bottom losers go back to waiting). Each court shows who is next on it; a court starts as soon as two pairs are waiting. Partners are split every game.'};
 function showModeHelp(){ $('#modeHelp').textContent = MODE_HELP[S.mode]||''; }
-$('#mode').onchange = e => { S.mode = e.target.value; if (S.mode==='ladder') S.sync = true; save(); renderCourts(); };
+$('#mode').onchange = e => { S.mode = e.target.value; save(); renderCourts(); };
 $('#sync').onchange = e => { S.sync = e.target.checked; save(); };
-$('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; S.results=[]; S.ladder={}; pending=null; save(); render(); };
+$('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; S.results=[]; S.ladder={}; S.ladderQ={}; pending=null; save(); render(); };
 $('#clearAll').onclick = () => { if (!confirm('Remove all players and courts?')) return; localStorage.removeItem(KEY); S = load(); pending=null; render(); };
 
 $('#setupLoad').onclick=()=>{
@@ -667,6 +668,18 @@ function ladderNext(state, level){
   state.ladder[level] = {};
   return true;
 }
+function ladderFill(state, lvl){
+  const cs = activeCourts(state, lvl); state.ladderQ = state.ladderQ || {};
+  cs.forEach((c,i)=>{
+    if (state.live[c.name]) return;
+    const Q = state.ladderQ[c.name] = state.ladderQ[c.name] || [];
+    if (i===cs.length-1) while (Q.length<2) {          // bottom court tops up from people waiting
+      const f = freePool(state, lvl).sort((a,b)=>a.games-b.games || b.satStreak-a.satStreak);
+      if (f.length<2) break; Q.push([f[0].id, f[1].id]);
+    }
+    if (Q.length>=2) { const [x,y] = Q.splice(0,2); state.live[c.name] = { a:[x[0],y[0]], b:[x[1],y[1]] }; }  // partners split
+  });
+}
 function leaderboard(state){
   const P={}, T={};
   for (const r of state.results||[]) {
@@ -739,6 +752,7 @@ function renderPlay(){
           : (S.sync && (S.waiting||{})[c.name])
             ? `<p class="muted">✓ Finished. Waiting for the other ${c.level} court(s) to finish, then everyone is reshuffled.</p><button class="btn sec startc" data-c="${esc(c.name)}">Don't wait, start now</button>`
             : `<p class="muted">Empty. Not enough free players at this level, or not started.</p><button class="btn sec startc" data-c="${esc(c.name)}">Start this court</button><button class="btn small sec cclose" data-c="${esc(c.name)}" style="margin-top:6px">Close this court</button>`}
+      ${S.mode==='ladder' && ((S.ladderQ||{})[c.name]||[]).length ? `<p class="muted" style="margin:6px 0 0">⏭ <b>Next on this court:</b> ${(S.ladderQ[c.name]).map(pr=>pr.map(id=>esc((by(id)||{name:'?'}).name)).join(' &amp; ')).join(' · ')}</p>` : ''}
     </div>`;}).join('') || '<div class="card muted">Add courts in Setup first.</div>';
   document.querySelectorAll('.slot').forEach(e=>e.onchange=()=>{
     const m = S.live[e.dataset.c]; const newId = +e.value; const oldId = m[e.dataset.t][+e.dataset.i];
@@ -754,14 +768,14 @@ function renderPlay(){
     if ((sa==null)!==(sb==null)) return alert('Enter both scores, or leave both empty.');
     if (sa!=null) recordResult(S, cn, sa, sb);
     if (S.mode==='ladder') {
-      S.ladder = S.ladder||{}; S.ladder[lvl] = S.ladder[lvl]||{};
-      S.ladder[lvl][cn] = sa>sb ? {win:[...m.a], lose:[...m.b]} : {win:[...m.b], lose:[...m.a]};
-      finishCourt(S, cn, false); S.waiting = S.waiting || {}; S.waiting[cn] = true;
-      if (activeCourts(S,lvl).every(c=>!S.live[c.name])) {
-        if (ladderNext(S, lvl)) activeCourts(S,lvl).forEach(c=>S.waiting[c.name]=false);
-        else { for (const c of activeCourts(S,lvl)) { S.waiting[c.name]=false; S.live[c.name]=pickForCourt(S,c); } S.ladder[lvl]={}; }
-      }
-      save(); renderPlay(); return;
+      S.ladderQ = S.ladderQ || {};
+      const cs = activeCourts(S, lvl), i = cs.findIndex(c=>c.name===cn);
+      const win = sa>sb ? [...m.a] : [...m.b], lose = sa>sb ? [...m.b] : [...m.a];
+      finishCourt(S, cn, false);
+      const q = n => (S.ladderQ[n] = S.ladderQ[n] || []);
+      q(cs[Math.max(0,i-1)].name).push(win);              // winners up (top court winners stay)
+      if (i < cs.length-1) q(cs[i+1].name).push(lose);    // losers down; bottom-court losers go back to waiting
+      ladderFill(S, lvl); save(); renderPlay(); return;
     }
     if (!S.sync) { finishCourt(S, cn); save(); renderPlay(); return; }
     finishCourt(S, cn, false); S.waiting = S.waiting || {}; S.waiting[cn] = true;
@@ -773,7 +787,7 @@ function renderPlay(){
   });
   document.querySelectorAll('.cclose').forEach(e=>e.onclick=()=>{ const c=court(e.dataset.c);
     if (S.live[c.name] && !confirm('Close '+c.name+'? The game on it now won\'t be counted. Games-played counts are kept.')) return;
-    c.off=true; S.live[c.name]=null; if (S.waiting) S.waiting[c.name]=false; if (S.ladder&&S.ladder[c.level]) delete S.ladder[c.level][c.name]; save(); renderPlay(); });
+    c.off=true; S.live[c.name]=null; if (S.waiting) S.waiting[c.name]=false; if (S.ladderQ) delete S.ladderQ[c.name]; save(); renderPlay(); });
   document.querySelectorAll('.copen').forEach(e=>e.onclick=()=>{ const c=court(e.dataset.c); c.off=false; save(); renderPlay(); });
   document.querySelectorAll('.reroll').forEach(e=>e.onclick=()=>{ S.live[e.dataset.c]=null; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); save(); renderPlay(); });
   document.querySelectorAll('.startc').forEach(e=>e.onclick=()=>{ if (S.waiting) S.waiting[e.dataset.c]=false; S.live[e.dataset.c]=pickForCourt(S, court(e.dataset.c)); if(!S.live[e.dataset.c]) alert('Need 4 free players at this level.'); save(); renderPlay(); });
