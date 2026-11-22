@@ -56,6 +56,7 @@
     <button data-tab="host">Host 🔒</button>
     <button data-tab="players">Players</button>
     <button data-tab="play">Play</button>
+    <button data-tab="scores">🏆 Scores</button>
   </nav>
 </header>
 <main>
@@ -84,6 +85,12 @@
       <button class="btn sec" id="newSession">Start a new session (keep players, reset games)</button>
       <button class="btn sec" id="clearAll">Clear everything</button>
     </div>
+  </section>
+
+  <!-- SCORES -->
+  <section id="scores">
+    <div id="boardView" class="card" style="display:none"></div>
+    <div class="card"><h2>All games</h2><p class="muted">Fix any score here; the leaderboard updates straight away.</p><div id="gameList"></div></div>
   </section>
 
   <!-- HOST (organisers only) -->
@@ -140,7 +147,6 @@
     <div id="courtsView"></div>
     <div id="queueView" class="card" style="display:none"></div>
     <div id="countView" class="card" style="display:none"></div>
-    <div id="boardView" class="card" style="display:none"></div>
     <div class="card">
       <h2>Late arrival</h2>
       <div class="row"><input id="lateName" placeholder="Name" style="flex:1.6"><select id="lateLevel"><option>Improvers</option><option>Intermediate</option></select></div>
@@ -652,6 +658,7 @@ function leaderboard(state){
 function renderBoard(){
   const by = id => S.players.find(p=>p.id===id), nm = id => esc((by(id)||{name:'?'}).name);
   const lb = leaderboard(S);
+  renderGames();
   if (!lb.players.length) { $('#boardView').style.display='none'; return; }
   $('#boardView').style.display='block';
   const row = (x,i,names) => `<tr><td>${i+1}. ${names}</td><td class="r">${x.w}/${x.g} won</td><td class="r">${x.pf-x.pa>=0?'+':''}${x.pf-x.pa}</td></tr>`;
@@ -669,6 +676,17 @@ function renderBoard(){
     try { await navigator.clipboard.writeText(txt); alert('Copied! Paste it into WhatsApp.'); } catch(e) { prompt('Copy this:', txt); }
   };
   $('#undoScore').onclick = () => { if (confirm('Remove the last score entered? (Games-played counts stay.)')) { S.results.pop(); save(); renderBoard(); } };
+}
+function renderGames(){
+  const by = id => S.players.find(p=>p.id===id), nm = id => esc((by(id)||{name:'?'}).name);
+  const rs = (S.results||[]).map((r,i)=>({r,i})).reverse();
+  $('#gameList').innerHTML = rs.length ? rs.map(({r,i})=>`<div style="border-top:1px solid #eef1f3;padding:8px 0">
+    <div class="muted" style="font-size:12px">Game ${i+1} · ${esc(r.court)} · ${new Date(r.t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>
+    <div class="row" style="align-items:center"><span style="flex:2">${r.a.map(nm).join(' &amp; ')}</span><input type="number" inputmode="numeric" class="ge" data-i="${i}" data-t="sa" value="${r.sa}" style="flex:.6;text-align:center"></div>
+    <div class="row" style="align-items:center"><span style="flex:2">${r.b.map(nm).join(' &amp; ')}</span><input type="number" inputmode="numeric" class="ge" data-i="${i}" data-t="sb" value="${r.sb}" style="flex:.6;text-align:center"></div>
+    <button class="btn small sec gdel" data-i="${i}">Delete this score</button></div>`).join('') : '<p class="muted">No scores yet. Enter them on each court in Play.</p>';
+  document.querySelectorAll('.ge').forEach(e=>e.onchange=()=>{ const v=+e.value; if (isNaN(v)) return; S.results[+e.dataset.i][e.dataset.t]=v; save(); renderBoard(); });
+  document.querySelectorAll('.gdel').forEach(e=>e.onclick=()=>{ if (confirm('Delete this score? Games-played counts stay.')) { S.results.splice(+e.dataset.i,1); save(); renderBoard(); } });
 }
 function renderPlay(){
   S.live = S.live || {};
@@ -842,7 +860,7 @@ function renderSimple(){
   $('#simpleList').innerHTML = LEVELS.map(L=>{const ps=here.filter(p=>p.level===L).map(p=>esc(p.name)).sort(); return ps.length?`<p><span class="pill ${L}">${L}</span> ${ps.join(', ')}</p>`:'';}).join('') || '<p class="muted">No players yet.</p>';
   $('#pinLine').textContent = S.pin ? 'A host PIN is set on this device. The Host tab asks for it.' : 'No PIN yet. Anyone can open the Host tab. Set a PIN to protect ratings and preferences.';
 }
-function render(){ renderCourts(); renderPlayers(); renderPlay(); renderSimple(); }
+function render(){ renderCourts(); renderPlayers(); renderPlay(); renderSimple(); renderBoard(); }
 render();
 </script>
 </body>
