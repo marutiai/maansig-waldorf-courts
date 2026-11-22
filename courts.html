@@ -48,6 +48,15 @@ main{padding:10px;max-width:1100px;margin:auto}
 #dayModal h2 button{border:none;background:#eef1f3;border-radius:18px;padding:8px 14px;font-size:16px}
 .list .row{display:flex;justify-content:space-between;background:#fff;border-radius:10px;padding:10px 12px;margin:6px 0;font-size:16px;border-left:6px solid}
 .muted{color:#5d6d7e;font-size:14px}
+.picked{outline:3px solid #f1c40f;outline-offset:1px}
+.picked b::before{content:'✓ '}
+#plan{background:#fff;border-radius:12px;padding:12px;margin:10px 0}
+#plan h2{font-size:18px;margin:0 0 6px}
+.wk{border-top:1px solid #eef1f3;padding:8px 0}
+.wk .hd{display:flex;justify-content:space-between;font-weight:700}
+.pk{display:flex;justify-content:space-between;align-items:center;font-size:15px;padding:4px 0 4px 8px;border-left:5px solid;margin:4px 0}
+.pk button{border:none;background:#eef1f3;border-radius:14px;padding:4px 10px}
+.ok{color:#1e8449}.need{color:#b03a2e}
 .gm{background:#1c2833;color:#fff;border-radius:6px;padding:3px 4px;line-height:1.2}
 .gm b{display:block;font-size:13px}
 .gm span{font-size:11px;opacity:.85}
@@ -61,8 +70,9 @@ main{padding:10px;max-width:1100px;margin:auto}
   <span class="lbl" style="margin-left:6px">View</span><button class="chip" data-view="month">Month</button><button class="chip" data-view="week">Week</button></div>
 <div class="bar"><button id="prev">‹</button><b id="label"></b><button id="next">›</button></div>
 <div class="legend" id="legend"></div>
+<div id="plan"></div>
 <div id="view"></div>
-<p class="muted">Tap any day to open it. Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days. In2Sports (Canary Wharf) is entered by hand from Maansi's list.</p>
+<p class="muted">Tap a day to open it. Tap a slot to add it to <b>My plan</b> (tap again to remove). Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days. In2Sports (Canary Wharf) is entered by hand from Maansi's list.</p>
 </main>
 <div id="dayModal"><div class="box"><h2><span id="dTitle"></span><button id="dClose">Close ✕</button></h2><div id="dGrid"></div><div id="dList" class="list"></div></div></div>
 <script>
@@ -122,8 +132,35 @@ function blocks(sl,lanes,cls,labelFn,heightPx){
   return sl.map(s=>{const[a,b]=span(s);const st=Math.max(a,H0*60),en=Math.min(b,H1*60);if(en<=st)return'';
     const li=lanes.indexOf(s[2]),w=100/lanes.length;
     const top=(st-H0*60)/tot*100,h=(en-st)/tot*100;
-    return `<div class="${cls}" style="top:${top}%;height:${h}%;left:calc(${li*w}% + 1px);width:calc(${w}% - 2px);background:${COL[s[2]]};opacity:${s[4]>=3?1:.75}">${labelFn(s,a,b)}</div>`;}).join('');
+    return `<div class="${cls} ${picks[keyOf(s)]?'picked':''}" data-k="${esc(keyOf(s))}" style="top:${top}%;height:${h}%;left:calc(${li*w}% + 1px);width:calc(${w}% - 2px);background:${COL[s[2]]};opacity:${s[4]>=3?1:.75}">${labelFn(s,a,b)}</div>`;}).join('');
 }
+let picks=JSON.parse(localStorage.getItem('wfPicks')||'{}'), target=+(localStorage.getItem('wfTarget')||2);
+const keyOf=s=>s[0]+'|'+s[2]+'|'+s[3];
+const savePicks=()=>localStorage.setItem('wfPicks',JSON.stringify(picks));
+function togglePick(k){ if(picks[k]) delete picks[k]; else { const s=rows().find(x=>keyOf(x)===k); if(s) picks[k]=s; } savePicks(); draw(); if($('dayModal').style.display==='block') openDay(openK); }
+const monOf=d0=>{const d=new Date(d0+'T12:00:00');d.setDate(d.getDate()-((d.getDay()+6)%7));return iso(d);};
+function rate(s){const p=s[5]||'';let m=p.match(/£([\d.]+)\s*per 2 courts/);if(m)return +m[1]/2;m=p.match(/£([\d.]+)/);return m?+m[1]:null;}
+function renderPlan(){
+  const ps=Object.values(picks).sort((a,b)=>(a[0]+span(a)[0])>(b[0]+span(b)[0])?1:-1);
+  const wk={}; ps.forEach(s=>(wk[monOf(s[0])]=wk[monOf(s[0])]||[]).push(s));
+  let tot=0;
+  const body=Object.keys(wk).sort().map(m=>{const l=wk[m],md=new Date(m+'T12:00:00');
+    const ok=l.length>=target;
+    return `<div class="wk"><div class="hd"><span>Week of ${md.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span><span class="${ok?'ok':'need'}">${l.length}/${target} ${ok?'✓':'· need '+(target-l.length)+' more'}</span></div>
+      ${l.map(s=>{const[a,b]=span(s),hrs=(b-a)/60,r=rate(s),c=r?r*minC*hrs:null; if(c)tot+=c;
+        return `<div class="pk" style="border-color:${COL[s[2]]}"><span>${new Date(s[0]+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'})} · <b>${rng(a,b)}</b> · ${s[2]} (${s[4]} free)${c?` · ≈£${c.toFixed(0)}`:''}</span><button data-un="${esc(keyOf(s))}">✕</button></div>`;}).join('')}</div>`;}).join('');
+  $('plan').innerHTML=`<h2>🗓 My plan</h2>
+    <div class="chips"><span class="lbl">Games per week</span>${[1,2,3,4,5].map(n=>`<button class="chip ${target===n?'on':''}" data-t="${n}">${n}</button>`).join('')}</div>
+    ${ps.length?body+`<p class="muted">Cost ≈ ${minC} court${minC>1?'s':''} × hours × price${tot?` · total ≈ £${tot.toFixed(0)}`:''}</p>
+      <div class="chips"><button class="chip" id="copyPlan">📋 Copy plan</button><button class="chip" id="clearPlan">Clear</button></div>`
+      :'<p class="muted">Tap slots on the calendar to try out a schedule. Each week shows how many you\'ve picked against your target.</p>'}`;
+  document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{target=+b.dataset.t;localStorage.setItem('wfTarget',target);draw();});
+  document.querySelectorAll('[data-un]').forEach(b=>b.onclick=()=>{delete picks[b.dataset.un];savePicks();draw();});
+  const cp=$('copyPlan'); if(cp) cp.onclick=async()=>{const t='Court plan\n'+ps.map(s=>{const[a,b]=span(s);return `${new Date(s[0]+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})} ${rng(a,b)} ${s[2]}`;}).join('\n');
+    try{await navigator.clipboard.writeText(t);alert('Copied');}catch(e){prompt('Copy this:',t);}};
+  const cl=$('clearPlan'); if(cl) cl.onclick=()=>{if(confirm('Clear your plan?')){picks={};savePicks();draw();}};
+}
+let openK=null;
 function draw(){
   const t=new Date(); if(!cur){cur=view==='month'?new Date(t.getFullYear(),t.getMonth(),1):new Date(t.getFullYear(),t.getMonth(),t.getDate()-((t.getDay()+6)%7));}
   if(view==='month'&&cur.getDate()!==1) cur=new Date(cur.getFullYear(),cur.getMonth(),1);
@@ -137,7 +174,7 @@ function draw(){
     for(let d=1;d<=n;d++){const k=iso(new Date(cur.getFullYear(),cur.getMonth(),d)),sl=(by[k]||[]).slice().sort((x,y)=>span(x)[0]-span(y)[0]);
       h+=`<div class="cell ${k<today?'past':''} ${k===today?'today':''}" data-d="${k}"><div class="dn">${d}</div>
         ${gamesOn(k).map(g=>`<div class="gm"><b>⭐ ${rng(mins(g[1]),mins(g[2]))}</b><span>${esc(g[3])}</span></div>`).join('')}
-        ${sl.map(s=>{const[a,b]=span(s);return `<div class="mc" style="background:${COL[s[2]]}22;border-color:${COL[s[2]]}"><b>${rng(a,b)}</b><span>${s[4]} court${s[4]>1?'s':''}</span></div>`;}).join('')}</div>`;}
+        ${sl.map(s=>{const[a,b]=span(s);return `<div class="mc ${picks[keyOf(s)]?'picked':''}" data-k="${esc(keyOf(s))}" style="background:${COL[s[2]]}22;border-color:${COL[s[2]]}"><b>${rng(a,b)}</b><span>${s[4]} court${s[4]>1?'s':''}</span></div>`;}).join('')}</div>`;}
     $('view').innerHTML=`<div class="mgrid">${h}</div>`;
   } else {
     const days=[...Array(7)].map((_,i)=>new Date(cur.getTime()+i*864e5));
@@ -150,10 +187,12 @@ function draw(){
     $('view').innerHTML=g+'</div>';
   }
   document.querySelectorAll('[data-d]').forEach(e=>e.onclick=()=>openDay(e.dataset.d));
+  document.querySelectorAll('#view [data-k]').forEach(e=>e.onclick=ev=>{ev.stopPropagation();togglePick(e.dataset.k);});
+  renderPlan();
 }
 function gameBlocks(k){const tot=(H1-H0)*60;return gamesOn(k).map(g=>{const a=mins(g[1]),b=mins(g[2]);
   return `<div class="blk2" style="top:${(a-H0*60)/tot*100}%;height:${(b-a)/tot*100}%;left:2px;right:2px;background:#1c2833;z-index:3">⭐ Our game<small>${rng(a,b)} · ${esc(g[3])}</small></div>`;}).join('');}
-function openDay(k){
+function openDay(k){ openK=k;
   const sl=(byDay()[k]||[]).slice().sort((x,y)=>span(x)[0]-span(y)[0]), lanes=VS.filter(v=>venues.has(v));
   const d=new Date(k+'T12:00:00');
   $('dTitle').textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
@@ -163,7 +202,8 @@ function openDay(k){
   g+=lanes.map(v=>`<div class="tcol" style="height:${H}px">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(sl.filter(s=>s[2]===v),[v],'blk2',(s,a,b)=>`${s[4]} court${s[4]>1?'s':''} free<small>${rng(a,b)}</small>`)}</div>`).join('');
   $('dGrid').innerHTML=g+'</div>';
   const gl=gamesOn(k).map(g=>`<div class="row" style="border-left-color:#1c2833;background:#1c2833;color:#fff"><b>⭐ ${rng(mins(g[1]),mins(g[2]))}</b><span>${esc(g[4])}</span><span>${esc(g[3])}</span></div>`).join('');
-  $('dList').innerHTML=gl+(sl.length?sl.map(s=>{const[a,b]=span(s);return `<div class="row" style="border-left-color:${COL[s[2]]}"><b>${rng(a,b)}</b><span>${s[2]}</span><span><b>${s[4]}</b> court${s[4]>1?'s':''} · ${s[5]}</span></div>`;}).join(''):'<p class="muted">Nothing free for these filters.</p>');
+  $('dList').innerHTML=gl+(sl.length?sl.map(s=>{const[a,b]=span(s);return `<div class="row ${picks[keyOf(s)]?'picked':''}" data-k="${esc(keyOf(s))}" style="border-left-color:${COL[s[2]]};cursor:pointer"><b>${rng(a,b)}</b><span>${s[2]}</span><span><b>${s[4]}</b> court${s[4]>1?'s':''} · ${s[5]}</span></div>`;}).join(''):'<p class="muted">Nothing free for these filters.</p>');
+  document.querySelectorAll('#dayModal [data-k]').forEach(e=>e.onclick=ev=>{ev.stopPropagation();togglePick(e.dataset.k);});
   $('dayModal').style.display='block'; window.scrollTo(0,0);
 }
 </script></body></html>
