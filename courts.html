@@ -21,7 +21,10 @@ main{padding:10px;max-width:1100px;margin:auto}
 /* month */
 .mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .dow{text-align:center;font-size:13px;font-weight:700;color:#5d6d7e;padding:4px 0}
-.cell{background:#fff;border-radius:10px;padding:4px;min-height:150px;cursor:pointer;display:flex;flex-direction:column}
+.cell{background:#fff;border-radius:10px;padding:4px;min-height:90px;cursor:pointer;display:flex;flex-direction:column;gap:3px}
+.mc{border:2px solid;border-radius:6px;padding:3px 4px;line-height:1.2}
+.mc b{display:block;font-size:13px}
+.mc span{font-size:11px;color:#34495e}
 .cell.past{opacity:.35}
 .cell.today{outline:3px solid #1f4e79}
 .cell .dn{font-weight:700;font-size:16px;margin:0 0 2px 2px}
@@ -36,7 +39,7 @@ main{padding:10px;max-width:1100px;margin:auto}
 .hrl{border-top:1px solid #eef1f3;position:absolute;left:0;right:0}
 .tlab{position:relative}
 .tlab div{position:absolute;right:6px;font-size:12px;color:#5d6d7e;transform:translateY(-50%)}
-.blk2{position:absolute;border-radius:6px;color:#fff;padding:3px 4px;font-size:13px;font-weight:600;overflow:hidden;line-height:1.2}
+.blk2{position:absolute;border-radius:6px;color:#fff;padding:4px 6px;font-size:13px;font-weight:600;line-height:1.25;min-height:44px;z-index:1;box-shadow:0 0 0 1px #fff}
 .blk2 small{display:block;font-weight:400;font-size:11px;opacity:.9}
 /* day modal */
 #dayModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;overflow:auto}
@@ -70,7 +73,10 @@ const mins=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
 function span(s){ // returns [start,end] minutes
   const t=s[3]; if(t.includes('(55 min)')){const a=mins(t.slice(0,5));return[a,a+55];}
   const [a,b]=t.split('-'); return [mins(a),mins(b)]; }
-const fmt=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const t12=m=>{let h=Math.floor(m/60),mm=m%60,ap=h>=12?'pm':'am';h=h%12||12;return {t:h+(mm?':'+String(mm).padStart(2,'0'):''),ap};};
+const fmt=m=>{const x=t12(m);return x.t+x.ap;};
+const rng=(a,b)=>{const x=t12(a),y=t12(b);return (x.ap===y.ap?x.t:x.t+x.ap)+'–'+y.t+y.ap;};
+const hlab=h=>{const x=t12(h*60);return x.t+x.ap;};
 fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{D=j.slots;$('upd').textContent='Updated '+j.updated;draw();});
 function rows(){return D.filter(s=>{ if(!venues.has(s[2])||s[4]<minC) return false; if(!fits) return true;
   if(['Sat','Sun'].includes(s[1])) return true; return span(s)[1]>19*60+30; });}
@@ -81,7 +87,7 @@ function controls(){
   document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{minC=+b.dataset.c;draw();});
   $('fits').className='chip '+(fits?'on':'');
   document.querySelectorAll('[data-view]').forEach(b=>{b.className='chip '+(view===b.dataset.view?'on':'');b.onclick=()=>{view=b.dataset.view;draw();};});
-  $('legend').innerHTML=VS.filter(v=>venues.has(v)).map(v=>`<span><i class="sw" style="background:${COL[v]}"></i>${AB[v]} = ${v}</span>`).join('')+'<span class="muted">Number in a block = courts free</span>';
+  $('legend').innerHTML=VS.filter(v=>venues.has(v)).map(v=>`<span><i class="sw" style="background:${COL[v]}"></i>${AB[v]} = ${v}</span>`).join('')+'<span class="muted">Colour = venue</span>';
 }
 $('fits').onclick=()=>{fits=!fits;draw();};
 $('prev').onclick=()=>{cur=view==='month'?new Date(cur.getFullYear(),cur.getMonth()-1,1):new Date(cur.getTime()-7*864e5);draw();};
@@ -107,9 +113,9 @@ function draw(){
     const first=(cur.getDay()+6)%7, n=new Date(cur.getFullYear(),cur.getMonth()+1,0).getDate();
     let h=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('');
     for(let i=0;i<first;i++) h+='<div></div>';
-    for(let d=1;d<=n;d++){const k=iso(new Date(cur.getFullYear(),cur.getMonth(),d)),sl=by[k]||[];
+    for(let d=1;d<=n;d++){const k=iso(new Date(cur.getFullYear(),cur.getMonth(),d)),sl=(by[k]||[]).slice().sort((x,y)=>span(x)[0]-span(y)[0]);
       h+=`<div class="cell ${k<today?'past':''} ${k===today?'today':''}" data-d="${k}"><div class="dn">${d}</div>
-        <div class="mini">${[10,14,18].map(x=>`<span class="hr" style="top:${(x-H0)/(H1-H0)*100}%">${x}</span>`).join('')}${blocks(sl,lanes,'blk',s=>s[4],0)}</div></div>`;}
+        ${sl.map(s=>{const[a,b]=span(s);return `<div class="mc" style="background:${COL[s[2]]}22;border-color:${COL[s[2]]}"><b>${rng(a,b)}</b><span>${s[4]} court${s[4]>1?'s':''}</span></div>`;}).join('')}</div>`;}
     $('view').innerHTML=`<div class="mgrid">${h}</div>`;
   } else {
     const days=[...Array(7)].map((_,i)=>new Date(cur.getTime()+i*864e5));
@@ -117,8 +123,8 @@ function draw(){
     const HP=46, H=(H1-H0)*HP;
     let g=`<div class="tgrid" style="grid-template-columns:44px repeat(7,minmax(92px,1fr))"><div class="th"></div>`;
     g+=days.map(d=>`<div class="th" data-d="${iso(d)}">${d.toLocaleDateString('en-GB',{weekday:'short'})}<small>${d.getDate()} ${d.toLocaleDateString('en-GB',{month:'short'})}</small></div>`).join('');
-    g+=`<div class="tlab" style="height:${H}px">${[...Array(H1-H0+1)].map((_,i)=>`<div style="top:${i*HP}px">${H0+i}:00</div>`).join('')}</div>`;
-    g+=days.map(d=>{const k=iso(d);return `<div class="tcol" style="height:${H}px;${k<today?'opacity:.4':''}" data-d="${k}">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(by[k]||[],lanes,'blk2',(s,a,b)=>`${AB[s[2]]} ×${s[4]}<small>${fmt(a)}–${fmt(b)}</small>`)}</div>`;}).join('');
+    g+=`<div class="tlab" style="height:${H}px">${[...Array(H1-H0+1)].map((_,i)=>`<div style="top:${i*HP}px">${hlab(H0+i)}</div>`).join('')}</div>`;
+    g+=days.map(d=>{const k=iso(d);return `<div class="tcol" style="height:${H}px;${k<today?'opacity:.4':''}" data-d="${k}">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(by[k]||[],lanes,'blk2',(s,a,b)=>`${AB[s[2]]} ×${s[4]}<small>${rng(a,b)}</small>`)}</div>`;}).join('');
     $('view').innerHTML=g+'</div>';
   }
   document.querySelectorAll('[data-d]').forEach(e=>e.onclick=()=>openDay(e.dataset.d));
@@ -129,10 +135,10 @@ function openDay(k){
   $('dTitle').textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
   const HP=56,H=(H1-H0)*HP;
   let g=`<div class="tgrid" style="grid-template-columns:50px repeat(${lanes.length},1fr)"><div class="th"></div>${lanes.map(v=>`<div class="th" style="color:${COL[v]}">${v}</div>`).join('')}`;
-  g+=`<div class="tlab" style="height:${H}px">${[...Array(H1-H0+1)].map((_,i)=>`<div style="top:${i*HP}px">${H0+i}:00</div>`).join('')}</div>`;
-  g+=lanes.map(v=>`<div class="tcol" style="height:${H}px">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(sl.filter(s=>s[2]===v),[v],'blk2',(s,a,b)=>`${s[4]} court${s[4]>1?'s':''} free<small>${fmt(a)}–${fmt(b)}</small>`)}</div>`).join('');
+  g+=`<div class="tlab" style="height:${H}px">${[...Array(H1-H0+1)].map((_,i)=>`<div style="top:${i*HP}px">${hlab(H0+i)}</div>`).join('')}</div>`;
+  g+=lanes.map(v=>`<div class="tcol" style="height:${H}px">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(sl.filter(s=>s[2]===v),[v],'blk2',(s,a,b)=>`${s[4]} court${s[4]>1?'s':''} free<small>${rng(a,b)}</small>`)}</div>`).join('');
   $('dGrid').innerHTML=g+'</div>';
-  $('dList').innerHTML=sl.length?sl.map(s=>{const[a,b]=span(s);return `<div class="row" style="border-left-color:${COL[s[2]]}"><b>${fmt(a)}–${fmt(b)}</b><span>${s[2]}</span><span><b>${s[4]}</b> court${s[4]>1?'s':''} · ${s[5]}</span></div>`;}).join(''):'<p class="muted">Nothing free for these filters.</p>';
+  $('dList').innerHTML=sl.length?sl.map(s=>{const[a,b]=span(s);return `<div class="row" style="border-left-color:${COL[s[2]]}"><b>${rng(a,b)}</b><span>${s[2]}</span><span><b>${s[4]}</b> court${s[4]>1?'s':''} · ${s[5]}</span></div>`;}).join(''):'<p class="muted">Nothing free for these filters.</p>';
   $('dayModal').style.display='block'; window.scrollTo(0,0);
 }
 </script></body></html>
