@@ -2,104 +2,137 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Waldorf Court Calendar</title>
 <style>
-body{font-family:-apple-system,system-ui,sans-serif;margin:0;background:#f4f6f8;color:#1c2833}
-header{background:#1f4e79;color:#fff;padding:12px 16px}
-header h1{font-size:18px;margin:0}
-header p{margin:4px 0 0;font-size:12px;opacity:.8}
-main{padding:12px;max-width:680px;margin:auto}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
-.chip{border:2px solid #d5dbe0;background:#fff;border-radius:20px;padding:8px 14px;font-size:15px}
+*{box-sizing:border-box}
+body{font-family:-apple-system,system-ui,sans-serif;margin:0;background:#f4f6f8;color:#1c2833;font-size:16px}
+header{background:#1f4e79;color:#fff;padding:14px 16px}
+header h1{font-size:20px;margin:0}
+header p{margin:4px 0 0;font-size:13px;opacity:.85}
+main{padding:10px;max-width:1100px;margin:auto}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;align-items:center}
+.chip{border:2px solid #d5dbe0;background:#fff;border-radius:22px;padding:9px 15px;font-size:15px;font-weight:500}
 .chip.on{background:#1f4e79;border-color:#1f4e79;color:#fff}
-.day{background:#fff;border-radius:12px;padding:12px 14px;margin:10px 0}
-.day h2{font-size:16px;margin:0 0 6px}
-.slot{display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #eef1f3;font-size:15px}
-.slot b{min-width:110px}
-.v{color:#5d6d7e}
-.n{font-weight:600}
-.n.g{color:#1e8449}.n.a{color:#b9770e}
-.muted{color:#5d6d7e;font-size:13px}
-
-.cal{background:#fff;border-radius:12px;padding:10px}
-.calhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.calhead button{border:none;background:#eef1f3;border-radius:16px;padding:6px 14px;font-size:18px}
-.calhead b{font-size:17px}
-.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.dow{text-align:center;font-size:12px;color:#5d6d7e;padding:2px 0}
-.cell{min-height:54px;border-radius:8px;background:#f7f9fa;padding:4px;font-size:13px;position:relative}
-.cell.has{background:#eaf2fb;cursor:pointer}
-.cell.sel{outline:2px solid #1f4e79}
+.lbl{font-size:14px;color:#5d6d7e;font-weight:600}
+.bar{display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:12px;padding:10px 12px;margin:8px 0}
+.bar button{border:none;background:#eef1f3;border-radius:18px;width:44px;height:40px;font-size:22px}
+.bar b{font-size:19px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:14px;margin:6px 2px}
+.legend span{display:flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+/* month */
+.mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.dow{text-align:center;font-size:13px;font-weight:700;color:#5d6d7e;padding:4px 0}
+.cell{background:#fff;border-radius:10px;padding:4px;min-height:150px;cursor:pointer;display:flex;flex-direction:column}
 .cell.past{opacity:.35}
-.dots{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
-.dot{width:9px;height:9px;border-radius:50%}
-.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin:8px 0}
-.legend span{display:flex;align-items:center;gap:4px}
-.ev{font-size:10px;line-height:1.25;border-left:3px solid;padding-left:3px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cell{min-height:70px;overflow:hidden}
-.view button{flex:1}
-.wk .day h2{font-size:15px}
+.cell.today{outline:3px solid #1f4e79}
+.cell .dn{font-weight:700;font-size:16px;margin:0 0 2px 2px}
+.mini{position:relative;flex:1;min-height:120px;background:repeating-linear-gradient(#fff 0 calc(100%/7 - 1px),#eef1f3 calc(100%/7 - 1px) calc(100%/7));border-radius:6px}
+.mini .blk{position:absolute;border-radius:4px;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.mini .hr{position:absolute;left:0;font-size:9px;color:#99a3ad}
+/* week / day */
+.tgrid{display:grid;background:#fff;border-radius:12px;overflow:auto}
+.th{position:sticky;top:0;background:#fff;z-index:2;text-align:center;font-weight:700;font-size:14px;padding:8px 2px;border-bottom:1px solid #e5e8eb;cursor:pointer}
+.th small{display:block;font-weight:500;color:#5d6d7e}
+.tcol{position:relative;border-left:1px solid #eef1f3}
+.hrl{border-top:1px solid #eef1f3;position:absolute;left:0;right:0}
+.tlab{position:relative}
+.tlab div{position:absolute;right:6px;font-size:12px;color:#5d6d7e;transform:translateY(-50%)}
+.blk2{position:absolute;border-radius:6px;color:#fff;padding:3px 4px;font-size:13px;font-weight:600;overflow:hidden;line-height:1.2}
+.blk2 small{display:block;font-weight:400;font-size:11px;opacity:.9}
+/* day modal */
+#dayModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;overflow:auto}
+#dayModal .box{background:#f4f6f8;max-width:760px;margin:20px auto;border-radius:14px;padding:12px}
+#dayModal h2{margin:4px 6px 10px;font-size:20px;display:flex;justify-content:space-between;align-items:center}
+#dayModal h2 button{border:none;background:#eef1f3;border-radius:18px;padding:8px 14px;font-size:16px}
+.list .row{display:flex;justify-content:space-between;background:#fff;border-radius:10px;padding:10px 12px;margin:6px 0;font-size:16px;border-left:6px solid}
+.muted{color:#5d6d7e;font-size:14px}
 </style></head><body>
 <header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p></header>
 <main>
-<div class="chips" id="venues"></div>
-<div class="chips">
-  <button class="chip on" id="fits">Weekday evenings / weekends only</button>
-</div>
-<div class="chips" id="minc">
-</div>
-<div class="chips view"><button class="chip" data-view="month">Month</button><button class="chip" data-view="week">Week</button></div>
-<div class="cal"><div class="calhead"><button id="prev">‹</button><b id="mlabel"></b><button id="next">›</button></div>
+<div class="chips"><span class="lbl">Venues</span><span id="venues" class="chips" style="margin:0"></span></div>
+<div class="chips"><span class="lbl">Min courts</span><span id="minc" class="chips" style="margin:0"></span></div>
+<div class="chips"><button class="chip on" id="fits">Weekday evenings / weekends only</button>
+  <span class="lbl" style="margin-left:6px">View</span><button class="chip" data-view="month">Month</button><button class="chip" data-view="week">Week</button></div>
+<div class="bar"><button id="prev">‹</button><b id="label"></b><button id="next">›</button></div>
 <div class="legend" id="legend"></div>
-<div class="grid" id="grid"></div></div>
-<div id="list"></div>
-<p class="muted">Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days.</p>
+<div id="view"></div>
+<p class="muted">Tap any day to open it. Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days.</p>
 </main>
+<div id="dayModal"><div class="box"><h2><span id="dTitle"></span><button id="dClose">Close ✕</button></h2><div id="dGrid"></div><div id="dList" class="list"></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
-const COL={'Royal Docks':'#1f4e79','Bow School':'#7d3c98','Somers Town':'#1e8449',"George Green's":'#b9770e'};
-let D=[],venues=new Set(Object.keys(COL)),fits=true,month='all';
+const COL={'Royal Docks':'#2e6fb7','Bow School':'#8e44ad','Somers Town':'#1e8449',"George Green's":'#d68910'};
+const AB={'Royal Docks':'RD','Bow School':'Bow','Somers Town':'ST',"George Green's":'GG'};
+const VS=Object.keys(COL);
+const H0=8,H1=22;              // timeline 08:00–22:00
+let D=[],venues=new Set(VS),fits=true,minC=2,view='month',cur=null;
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const mins=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
+function span(s){ // returns [start,end] minutes
+  const t=s[3]; if(t.includes('(55 min)')){const a=mins(t.slice(0,5));return[a,a+55];}
+  const [a,b]=t.split('-'); return [mins(a),mins(b)]; }
+const fmt=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
 fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{D=j.slots;$('upd').textContent='Updated '+j.updated;draw();});
-let ym=null,view='month',wk=null,minC=2;
-const ABBR={'Royal Docks':'RD','Bow School':'Bow','Somers Town':'ST',"George Green's":'GG'};
-function chips(){
-  $('venues').innerHTML=Object.keys(COL).map(v=>`<button class="chip ${venues.has(v)?'on':''}" data-v="${v}">${v}</button>`).join('');
+function rows(){return D.filter(s=>{ if(!venues.has(s[2])||s[4]<minC) return false; if(!fits) return true;
+  if(['Sat','Sun'].includes(s[1])) return true; return span(s)[1]>19*60+30; });}
+function controls(){
+  $('venues').innerHTML=VS.map(v=>`<button class="chip ${venues.has(v)?'on':''}" data-v="${v}" style="${venues.has(v)?'background:'+COL[v]+';border-color:'+COL[v]:''}">${v}</button>`).join('');
   document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{const v=b.dataset.v;venues.has(v)?venues.delete(v):venues.add(v);draw();});
-  $('fits').className='chip '+(fits?'on':'');
-  $('minc').innerHTML='<span class="muted" style="align-self:center">Min courts:</span>'+[1,2,3,4,5,6].map(n=>`<button class="chip ${minC===n?'on':''}" data-c="${n}">${n}+</button>`).join('');
+  $('minc').innerHTML=[1,2,3,4,5,6].map(n=>`<button class="chip ${minC===n?'on':''}" data-c="${n}">${n}+</button>`).join('');
   document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{minC=+b.dataset.c;draw();});
+  $('fits').className='chip '+(fits?'on':'');
   document.querySelectorAll('[data-view]').forEach(b=>{b.className='chip '+(view===b.dataset.view?'on':'');b.onclick=()=>{view=b.dataset.view;draw();};});
-  $('legend').innerHTML=Object.keys(COL).filter(v=>venues.has(v)).map(v=>`<span><i class="dot" style="background:${COL[v]}"></i>${ABBR[v]} = ${v}</span>`).join('');
+  $('legend').innerHTML=VS.filter(v=>venues.has(v)).map(v=>`<span><i class="sw" style="background:${COL[v]}"></i>${AB[v]} = ${v}</span>`).join('')+'<span class="muted">Number in a block = courts free</span>';
 }
 $('fits').onclick=()=>{fits=!fits;draw();};
-$('prev').onclick=()=>{if(view==='month')ym=new Date(ym.getFullYear(),ym.getMonth()-1,1);else wk=new Date(wk.getTime()-7*864e5);draw();};
-$('next').onclick=()=>{if(view==='month')ym=new Date(ym.getFullYear(),ym.getMonth()+1,1);else wk=new Date(wk.getTime()+7*864e5);draw();};
-const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-const short=t=>t.replace(/:00/g,'').replace(' (55 min)','');
+$('prev').onclick=()=>{cur=view==='month'?new Date(cur.getFullYear(),cur.getMonth()-1,1):new Date(cur.getTime()-7*864e5);draw();};
+$('next').onclick=()=>{cur=view==='month'?new Date(cur.getFullYear(),cur.getMonth()+1,1):new Date(cur.getTime()+7*864e5);draw();};
+$('dClose').onclick=()=>$('dayModal').style.display='none';
+$('dayModal').onclick=e=>{if(e.target.id==='dayModal')$('dayModal').style.display='none';};
+function byDay(){const b={};rows().forEach(s=>(b[s[0]]=b[s[0]]||[]).push(s));return b;}
+// blocks laid out in lanes per visible venue
+function blocks(sl,lanes,cls,labelFn,heightPx){
+  const tot=(H1-H0)*60;
+  return sl.map(s=>{const[a,b]=span(s);const st=Math.max(a,H0*60),en=Math.min(b,H1*60);if(en<=st)return'';
+    const li=lanes.indexOf(s[2]),w=100/lanes.length;
+    const top=(st-H0*60)/tot*100,h=(en-st)/tot*100;
+    return `<div class="${cls}" style="top:${top}%;height:${h}%;left:calc(${li*w}% + 1px);width:calc(${w}% - 2px);background:${COL[s[2]]};opacity:${s[4]>=3?1:.75}">${labelFn(s,a,b)}</div>`;}).join('');
+}
 function draw(){
-  const t=new Date();
-  if(!ym) ym=new Date(t.getFullYear(),t.getMonth(),1);
-  if(!wk){wk=new Date(t.getFullYear(),t.getMonth(),t.getDate());wk=new Date(wk.getTime()-((wk.getDay()+6)%7)*864e5);}
-  chips();
-  const timeOk=s=>{const wkend=['Sat','Sun'].includes(s[1]);if(wkend)return true;const st=s[3].slice(0,5),en=(s[3].split('-')[1]||'').slice(0,5);return s[2]==="George Green's"?st>='19:00':en>'19:30';};
-  const rows=D.filter(s=>venues.has(s[2])&&s[4]>=minC&&(!fits||timeOk(s)));
-  const by={};rows.forEach(s=>(by[s[0]]=by[s[0]]||[]).push(s));
-  const today=iso(t);
+  const t=new Date(); if(!cur){cur=view==='month'?new Date(t.getFullYear(),t.getMonth(),1):new Date(t.getFullYear(),t.getMonth(),t.getDate()-((t.getDay()+6)%7));}
+  if(view==='month'&&cur.getDate()!==1) cur=new Date(cur.getFullYear(),cur.getMonth(),1);
+  if(view==='week'&&cur.getDate()===1&&(cur.getDay()+6)%7) cur=new Date(cur.getTime()-((cur.getDay()+6)%7)*864e5);
+  controls(); const by=byDay(), lanes=VS.filter(v=>venues.has(v)), today=iso(t);
   if(view==='month'){
-    $('grid').style.display='grid';
-    $('mlabel').textContent=ym.toLocaleString('en-GB',{month:'long',year:'numeric'});
-    const first=(ym.getDay()+6)%7, days=new Date(ym.getFullYear(),ym.getMonth()+1,0).getDate();
+    $('label').textContent=cur.toLocaleString('en-GB',{month:'long',year:'numeric'});
+    const first=(cur.getDay()+6)%7, n=new Date(cur.getFullYear(),cur.getMonth()+1,0).getDate();
     let h=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('');
     for(let i=0;i<first;i++) h+='<div></div>';
-    for(let d=1;d<=days;d++){const k=iso(new Date(ym.getFullYear(),ym.getMonth(),d)),sl=by[k]||[];
-      h+=`<div class="cell ${sl.length?'has':''} ${k<today?'past':''}"><b>${d}</b>${sl.map(s=>`<div class="ev" style="border-color:${COL[s[2]]}">${ABBR[s[2]]} ${short(s[3])} ×${s[4]}</div>`).join('')}</div>`;}
-    $('grid').innerHTML=h; $('list').innerHTML='';
+    for(let d=1;d<=n;d++){const k=iso(new Date(cur.getFullYear(),cur.getMonth(),d)),sl=by[k]||[];
+      h+=`<div class="cell ${k<today?'past':''} ${k===today?'today':''}" data-d="${k}"><div class="dn">${d}</div>
+        <div class="mini">${[10,14,18].map(x=>`<span class="hr" style="top:${(x-H0)/(H1-H0)*100}%">${x}</span>`).join('')}${blocks(sl,lanes,'blk',s=>s[4],0)}</div></div>`;}
+    $('view').innerHTML=`<div class="mgrid">${h}</div>`;
   } else {
-    $('grid').style.display='none';
-    const end=new Date(wk.getTime()+6*864e5);
-    $('mlabel').textContent=wk.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' – '+end.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-    let h='';
-    for(let i=0;i<7;i++){const dt=new Date(wk.getTime()+i*864e5),k=iso(dt),sl=by[k]||[];
-      h+=`<div class="day ${k<today?'past':''}"><h2>${dt.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'})}</h2>${sl.length?sl.map(s=>`<div class="slot"><b>${s[3]}</b><span class="v" style="color:${COL[s[2]]}">${s[2]}</span><span class="n ${s[4]>=3?'g':'a'}">${s[4]} court${s[4]>1?'s':''}</span></div>`).join(''):'<p class="muted">Nothing free</p>'}</div>`;}
-    $('list').innerHTML='<div class="wk">'+h+'</div>';
+    const days=[...Array(7)].map((_,i)=>new Date(cur.getTime()+i*864e5));
+    $('label').textContent=days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' – '+days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    const HP=46, H=(H1-H0)*HP;
+    let g=`<div class="tgrid" style="grid-template-columns:44px repeat(7,minmax(92px,1fr))"><div class="th"></div>`;
+    g+=days.map(d=>`<div class="th" data-d="${iso(d)}">${d.toLocaleDateString('en-GB',{weekday:'short'})}<small>${d.getDate()} ${d.toLocaleDateString('en-GB',{month:'short'})}</small></div>`).join('');
+    g+=`<div class="tlab" style="height:${H}px">${[...Array(H1-H0+1)].map((_,i)=>`<div style="top:${i*HP}px">${H0+i}:00</div>`).join('')}</div>`;
+    g+=days.map(d=>{const k=iso(d);return `<div class="tcol" style="height:${H}px;${k<today?'opacity:.4':''}" data-d="${k}">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(by[k]||[],lanes,'blk2',(s,a,b)=>`${AB[s[2]]} ×${s[4]}<small>${fmt(a)}–${fmt(b)}</small>`)}</div>`;}).join('');
+    $('view').innerHTML=g+'</div>';
   }
+  document.querySelectorAll('[data-d]').forEach(e=>e.onclick=()=>openDay(e.dataset.d));
+}
+function openDay(k){
+  const sl=(byDay()[k]||[]).slice().sort((x,y)=>span(x)[0]-span(y)[0]), lanes=VS.filter(v=>venues.has(v));
+  const d=new Date(k+'T12:00:00');
+  $('dTitle').textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
+  const HP=56,H=(H1-H0)*HP;
+  let g=`<div class="tgrid" style="grid-template-columns:50px repeat(${lanes.length},1fr)"><div class="th"></div>${lanes.map(v=>`<div class="th" style="color:${COL[v]}">${v}</div>`).join('')}`;
+  g+=`<div class="tlab" style="height:${H}px">${[...Array(H1-H0+1)].map((_,i)=>`<div style="top:${i*HP}px">${H0+i}:00</div>`).join('')}</div>`;
+  g+=lanes.map(v=>`<div class="tcol" style="height:${H}px">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(sl.filter(s=>s[2]===v),[v],'blk2',(s,a,b)=>`${s[4]} court${s[4]>1?'s':''} free<small>${fmt(a)}–${fmt(b)}</small>`)}</div>`).join('');
+  $('dGrid').innerHTML=g+'</div>';
+  $('dList').innerHTML=sl.length?sl.map(s=>{const[a,b]=span(s);return `<div class="row" style="border-left-color:${COL[s[2]]}"><b>${fmt(a)}–${fmt(b)}</b><span>${s[2]}</span><span><b>${s[4]}</b> court${s[4]>1?'s':''} · ${s[5]}</span></div>`;}).join(''):'<p class="muted">Nothing free for these filters.</p>';
+  $('dayModal').style.display='block'; window.scrollTo(0,0);
 }
 </script></body></html>
