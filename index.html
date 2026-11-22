@@ -756,10 +756,17 @@ function renderPlay(){
   const onCourt = new Set(Object.values(S.live).filter(Boolean).flatMap(m=>[...m.a,...m.b]));
   const cs = LEVELS.map(L=>{ const ps = S.players.filter(p=>p.level===L); if(!ps.length) return '';
     ps.sort((a,b)=> (a.played||0)-(b.played||0) || a.name.localeCompare(b.name));
-    return `<p><span class="pill ${L}">${L}</span></p><table>${ps.map(p=>`<tr class="${p.away?'away':''}"><td>${esc(p.name)}${onCourt.has(p.id)?' 🏸':''}</td><td class="r"><button class="adj" data-id="${p.id}" data-d="-1">−</button> <b>${p.played||0}</b> <button class="adj" data-id="${p.id}" data-d="1">+</button></td></tr>`).join('')}</table>`; }).join('');
+    return `<p><span class="pill ${L}">${L}</span></p><table>${ps.map(p=>`<tr class="${p.away?'away':''}"><td>${esc(p.name)}${onCourt.has(p.id)?' 🏸':''}</td><td class="r"><button class="adj" data-id="${p.id}" data-d="-1">−</button> <b>${p.played||0}</b> <button class="adj" data-id="${p.id}" data-d="1">+</button> ${p.away?'':`<button class="adj leave" data-id="${p.id}" title="Leaving early">👋</button>`}</td></tr>`).join('')}</table>`; }).join('');
   $('#countView').style.display = cs ? 'block' : 'none';
-  $('#countView').innerHTML = `<h2>Games played</h2>${cs}<p class="muted">Fewest first. 🏸 = on court now. Counts go up when a game is marked finished. Use − / + to correct a count; it also changes who's up next.</p>`;
+  $('#countView').innerHTML = `<h2>Games played</h2>${cs}<p class="muted">Fewest first. 🏸 = on court now. Counts go up when a game is marked finished. Use − / + to correct a count; it also changes who's up next. Tap 👋 when someone leaves early: they're taken out of the rotation (and swapped off court if they're playing).</p>`;
   document.querySelectorAll('.adj').forEach(e=>e.onclick=()=>{ const p=by(+e.dataset.id), d=+e.dataset.d; if(d<0 && !(p.played>0)) return; p.played=(p.played||0)+d; p.games=Math.max(0,(p.games||0)+d); save(); renderPlay(); });
+  document.querySelectorAll('.leave').forEach(e=>e.onclick=()=>{ const p=by(+e.dataset.id);
+    if (!confirm(p.name+' is leaving early?')) return;
+    p.away=true;
+    for (const [cn,m] of Object.entries(S.live)) if (m) for (const t of ['a','b']) { const i=m[t].indexOf(p.id); if (i<0) continue;
+      const c=S.courts.find(x=>x.name===cn); const sub=freePool(S,c.level).sort((x,y)=>x.games-y.games||y.satStreak-x.satStreak)[0];
+      if (sub) m[t][i]=sub.id; else { S.live[cn]=null; alert('Not enough players to keep '+cn+' going. Court emptied.'); } }
+    save(); renderPlay(); });
   document.querySelectorAll('.qn').forEach(e=>e.onclick=()=>{ const p=by(+e.dataset.id); if(confirm(p.name+' has left?')){ p.away=true; save(); renderPlay(); } });
   const gone = S.players.filter(p=>p.away);
   $('#leftList').innerHTML = gone.length ? 'Away / left (tap to bring back): ' + gone.map(p=>`<a href="#" class="back" data-id="${p.id}">${esc(p.name)}</a>`).join(', ') : '';
