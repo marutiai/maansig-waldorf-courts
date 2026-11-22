@@ -73,7 +73,6 @@
       <select id="mode">
         <option value="each">Mix it up: fewest games go on next</option>
         <option value="two">Same four for 2 games, then sit 2</option>
-        <option value="stagger">Swap 2 each game: 2 stay on, 2 come in</option>
         <option value="ladder">Up &amp; down courts: winners up, losers down</option>
       </select>
       <p class="muted" id="modeHelp"></p>
@@ -522,7 +521,7 @@ const MODE_HELP={each:'Whoever has played least goes on next, mixed so people me
  two:'The same four play 2 games in a row, then sit out for 2 while the next four play.',
  stagger:'Every game, 2 players stay on and 2 fresh players come in, so partners keep changing. Over each pair of games everyone plays the same amount.',
  ladder:'For 2+ courts of the same level. Enter the score: the winning pair moves up a court, the losing pair moves down (top winners stay, bottom losers swap with people waiting). Partners are split every game. Courts change together.'};
-function showModeHelp(){ $('#modeHelp').textContent = MODE_HELP[S.mode]||''; }
+function showModeHelp(){ if (S.mode==='stagger') { S.mode='each'; save(); $('#mode').value='each'; } $('#modeHelp').textContent = MODE_HELP[S.mode]||''; }
 $('#mode').onchange = e => { S.mode = e.target.value; if (S.mode==='ladder') S.sync = true; save(); renderCourts(); };
 $('#sync').onchange = e => { S.sync = e.target.checked; save(); };
 $('#newSession').onclick = () => { if (!confirm('Reset games played for everyone?')) return; resetStats(S.players); S.players.forEach(p=>p.away=false); S.roundNo=0; S.current=null; S.live={}; S.results=[]; S.ladder={}; pending=null; save(); render(); };
