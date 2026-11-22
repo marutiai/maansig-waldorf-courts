@@ -139,6 +139,7 @@
       <button class="btn" id="kioskOpen">📱 Add my preferences</button>
     </div>
     <div class="card">
+      <div id="selfArrive"></div>
       <h2>Today's players</h2>
       <div id="simpleList"></div>
     </div>
@@ -150,6 +151,7 @@
       <button class="btn" id="fillCourts">Fill empty courts</button>
       <p class="muted">Each court runs on its own. When a game ends, tap <b>Game finished</b> on that court and the next four step on. Change anyone with the name menus.</p>
     </div>
+    <div id="arriveView" class="card" style="display:none"></div>
     <div id="courtsView"></div>
     <div id="queueView" class="card" style="display:none"></div>
     <div id="countView" class="card" style="display:none"></div>
@@ -360,7 +362,7 @@ function onCourtIds(state, except){
 function activeCourts(state, level){ return state.courts.filter(c=>!c.off && (!level || c.level===level)); }
 function freePool(state, level, except){
   const busy = onCourtIds(state, except);
-  return state.players.filter(p=>p.level===level && !p.away && !busy.has(p.id));
+  return state.players.filter(p=>p.level===level && !p.away && !p.notHere && !busy.has(p.id));
 }
 // Pick 4 for one court in fair-queue mode, mixing groups for variety.
 // Fair: anyone with fewer games than the 4th-fewest MUST play. Among the rest of the
@@ -490,7 +492,7 @@ if (window.PRELOAD && S.preloadTag !== window.PRELOAD.tag) {
   const fresh = !S.players.length || confirm(`Load the player list for ${P.tag}? This replaces the current players and courts.`);
   if (fresh) {
     S.players = []; S.nextId = 1; S.roundNo = 0; S.current = null;
-    for (const p of P.players) S.players.push(newPlayer(p, S.nextId++));
+    for (const p of P.players) { const np=newPlayer(p, S.nextId++); np.notHere=true; S.players.push(np); }
     if (P.courts) S.courts = P.courts;
     S.live = {};
     if (P.sync !== undefined) S.sync = P.sync;
@@ -545,7 +547,7 @@ $('#setupLoad').onclick=()=>{
   let P; try { P=JSON.parse(decodeURIComponent(escape(atob(v.slice(i+7).replace(/-/g,'+').replace(/_/g,'/'))))); } catch(e) { return alert('That setup link looks broken.'); }
   if (S.players.length && !confirm(`Load the player list for ${P.tag}? This replaces the current players and courts.`)) return;
   S.players=[]; S.nextId=1; S.roundNo=0; S.current=null; S.live={}; S.results=[]; S.ladder={};
-  for (const p of P.players) S.players.push(newPlayer(p, S.nextId++));
+  for (const p of P.players) { const np=newPlayer(p, S.nextId++); np.notHere=true; S.players.push(np); }
   if (P.courts) S.courts=P.courts; if (P.sync!==undefined) S.sync=P.sync; S.preloadTag=P.tag;
   $('#setupPaste').value=''; save(); render(); alert('Loaded '+P.players.length+' players.');
 };
@@ -559,7 +561,7 @@ $('#addPlayers').onclick = () => {
   const { players, bad } = parsePlayers($('#paste').value);
   for (const p of players) {
     if (S.players.some(x=>x.name.toLowerCase()===p.name.toLowerCase())) continue;
-    S.players.push(newPlayer(p, S.nextId++));
+    const np = newPlayer(p, S.nextId++); np.notHere = true; S.players.push(np);
   }
   $('#paste').value = bad.join('\n');
   save(); render();
@@ -711,6 +713,7 @@ function renderGames(){
 }
 function renderPlay(){
   S.live = S.live || {};
+  const ah = arrivalsHTML(); $('#arriveView').style.display = ah?'block':'none'; $('#arriveView').innerHTML = ah; wireArrivals(renderPlay);
   const by = id => S.players.find(p=>p.id===id);
   $('#courtsView').innerHTML = S.courts.map(c=>{
     const m = S.live[c.name];
@@ -775,7 +778,7 @@ function renderPlay(){
   $('#queueView').innerHTML = `<h2>Up next</h2>${qs}<p class="muted">Order for the next free spot. (Games played in brackets.) Tap a name if they've left.</p>`;
   // Games played so far (real games only; late arrivals' catch-up credit isn't counted)
   const onCourt = new Set(Object.values(S.live).filter(Boolean).flatMap(m=>[...m.a,...m.b]));
-  const cs = LEVELS.map(L=>{ const ps = S.players.filter(p=>p.level===L); if(!ps.length) return '';
+  const cs = LEVELS.map(L=>{ const ps = S.players.filter(p=>p.level===L && !p.notHere); if(!ps.length) return '';
     ps.sort((a,b)=> (a.played||0)-(b.played||0) || a.name.localeCompare(b.name));
     return `<p><span class="pill ${L}">${L}</span></p><table>${ps.map(p=>`<tr class="${p.away?'away':''}"><td>${esc(p.name)}${onCourt.has(p.id)?' 🏸':''}</td><td class="r"><button class="adj" data-id="${p.id}" data-d="-1">−</button> <b>${p.played||0}</b> <button class="adj" data-id="${p.id}" data-d="1">+</button> ${p.away?'':`<button class="adj leave" data-id="${p.id}" title="Leaving early">👋</button>`}</td></tr>`).join('')}</table>`; }).join('');
   $('#countView').style.display = cs ? 'block' : 'none';
@@ -870,13 +873,30 @@ $('#prefDownload').onclick = () => {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'waldorf-preferences-'+tag+'.csv';
   document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 };
+function checkIn(p){
+  const peers = S.players.filter(x=>x.level===p.level && !x.away && !x.notHere && x!==p);
+  const started = peers.some(x=>(x.games||0)>0);
+  p.notHere = false;
+  if (started) { p.games = Math.max(p.games, Math.min(...peers.map(x=>x.games))); p.streak=0; p.satStreak=0; }
+}
+function arrivalsHTML(){
+  const wait = S.players.filter(p=>p.notHere && !p.away);
+  if (!wait.length) return '';
+  return `<h2>Not arrived yet <span class="muted">(${wait.length})</span></h2><p class="muted">Tap a name when they arrive. Only arrived players are put on court.</p>
+    ${LEVELS.map(L=>{const ps=wait.filter(p=>p.level===L).sort((a,b)=>a.name.localeCompare(b.name)); return ps.length?`<p><span class="pill ${L}">${L}</span></p><div class="row" style="flex-wrap:wrap;gap:6px">${ps.map(p=>`<button class="btn small sec arrive" data-id="${p.id}" style="flex:0 0 auto">${esc(p.name)}</button>`).join('')}</div>`:'';}).join('')}
+    <button class="btn sec" id="allArrived" style="margin-top:8px">Everyone's here</button>`;
+}
+function wireArrivals(after){
+  document.querySelectorAll('.arrive').forEach(e=>e.onclick=()=>{ const p=S.players.find(x=>x.id===+e.dataset.id); checkIn(p); save(); after(); });
+  const all=$('#allArrived'); if (all) all.onclick=()=>{ S.players.filter(p=>p.notHere).forEach(checkIn); save(); after(); };
+}
 function addLate(){
   const name = $('#lateName').value.trim(); const level = $('#lateLevel').value;
   if (!name) return alert('Type a name first.');
   let p = S.players.find(x=>x.name.toLowerCase()===name.toLowerCase());
   const peers = S.players.filter(x=>x.level===level && !x.away && x!==p);
   const minG = peers.length ? Math.min(...peers.map(x=>x.games)) : 0;
-  if (p) { p.away=false; p.level=level; }
+  if (p) { p.away=false; p.notHere=false; p.level=level; }
   else { p = newPlayer({name, level, rating:3}, S.nextId++); S.players.push(p); }
   p.games = Math.max(p.games, minG); p.streak = 0; p.satStreak = 0;
   $('#lateName').value=''; save(); renderPlay();
@@ -884,7 +904,8 @@ function addLate(){
 $('#lateAdd').onclick = addLate;
 
 function renderSimple(){
-  const here = S.players.filter(p=>!p.away);
+  const ah = arrivalsHTML(); $('#selfArrive').innerHTML = ah ? ah.replace('Tap a name when they arrive.','Just arrived? Tap your name.') : ''; wireArrivals(renderSimple);
+  const here = S.players.filter(p=>!p.away && !p.notHere);
   $('#simpleList').innerHTML = LEVELS.map(L=>{const ps=here.filter(p=>p.level===L).map(p=>esc(p.name)).sort(); return ps.length?`<p><span class="pill ${L}">${L}</span> ${ps.join(', ')}</p>`:'';}).join('') || '<p class="muted">No players yet.</p>';
   $('#pinLine').textContent = S.pin ? 'A host PIN is set on this device. The Host tab asks for it.' : 'No PIN yet. Anyone can open the Host tab. Set a PIN to protect ratings and preferences.';
 }
