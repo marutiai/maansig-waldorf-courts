@@ -57,6 +57,15 @@
   .b.them { background:#fff; border:1px solid var(--line); border-top-left-radius:4px; }
   .b.me { background:var(--mine); margin-left:auto; border-top-right-radius:4px; }
   .empty { text-align:center; color:var(--mut); padding:40px 20px; }
+  .stages { display:flex; gap:6px; overflow-x:auto; padding:12px 14px 0; max-width:640px; margin:0 auto; scrollbar-width:none; }
+  .stages::-webkit-scrollbar { display:none; }
+  .stages button { flex:none; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:999px; padding:7px 13px; font-size:13px; font-weight:600; }
+  .stages button.on { background:var(--teal); color:#fff; border-color:var(--teal); }
+  .steps { display:flex; gap:4px; margin-top:12px; }
+  .steps i { flex:1; height:5px; border-radius:3px; background:#e3e9ec; }
+  .steps i.d { background:var(--teal2); } .steps i.n { background:var(--gold); }
+  .stepl { font-size:12px; color:var(--mut); margin-top:5px; }
+  .chip.lead { background:#efe6fb; color:#6b3fb0; } .chip.next { background:#e3f0fd; color:#2763a8; } .chip.pay { background:#e5f6ea; color:#2a7a45; }
   .toast { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(80px); background:var(--ink); color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; transition:transform .25s; }
   .toast.on { transform:translateX(-50%) translateY(0); }
 </style>
@@ -72,47 +81,69 @@
   </div>
 </header>
 <div class="demo">Demo with made-up names. View only: nothing is sent from here.</div>
+<div class="stages" id="stages">
+  <button class="on" data-s="">All types</button>
+  <button data-s="urgent">🔥 Urgent</button>
+  <button data-s="lead">🌱 New lead</button>
+  <button data-s="next">📅 Next game</button>
+  <button data-s="pay">💷 Payment</button>
+  <button data-s="away">✈️ Away / can't come</button>
+</div>
 <main id="list"></main>
 <div class="toast" id="toast">Draft copied</div>
 <script>
+const FLOW = { badminton:["First reply","Days/times","Other sports","Pricing","Upcoming games","Link + bank"], football:["First reply","Next game?","Other sports","Link + bank"] };
 const items = [
-  { who:"Alex", num:"+44 7000 000001", time:"6:42pm", sport:"Football · Sat 28/11", kind:"reply",
-    msg:"Yeah Saturday works for me! How do I sign up?",
-    draft:"https://www.meetup.com/waldorflondon/events/...\n\nPlease go through the description on this link for all the details and select attend!",
-    ctx:[{me:1,t:"Hey Alex,\nThank you for reaching out!",w:"Thu"},{me:0,t:"I'm in Stratford, can travel"},{me:1,t:"Would you like to play football next Saturday 1pm?"}] },
-  { who:"Priya", num:"+44 7000 000002", time:"6:30pm", sport:"Badminton · new lead", kind:"reply", urgent:true,
+  { who:"Priya", num:"+44 7000 000002", time:"6:30pm", sport:"Badminton", kind:"reply", stage:"urgent", urgent:true,
     msg:"Is there any space for today's game??",
     draft:"Hey Priya,\n\nSorry, today's session is full :(\n\nHere are the games next week:\n\n- Wed 25 Nov, 7:15-9:15pm in Island Gardens\n- Sun 29 Nov, 12-2pm in Custom House\n\nDoes either of the both work for you? :)",
     note:"Today is full. Two others have also asked." },
-  { who:"Sam", num:"+44 7000 000003", time:"5:58pm", sport:"Badminton · Wed 25/11", kind:"reply",
+  { who:"Rohan", num:"+44 7000 000006", time:"6:50pm", sport:"Badminton", kind:"reply", stage:"lead", flow:"badminton", step:3,
+    msg:"I'd say low intermediate, been playing on and off for 5 years",
+    draft:"We have 1 hour sessions for badminton for 10 pounds/person and 2 hour sessions for 14 pounds. Which one do you prefer?",
+    note:"Next in the flow: pricing, then upcoming games.",
+    ctx:[{me:1,t:"Hey Rohan,\nThank you for reaching out!",w:"Yesterday"},{me:0,t:"Based in Bow, happy to travel"},{me:1,t:"Generally, what time during which days do you prefer?"},{me:0,t:"Weekends mostly"},{me:1,t:"Are you interested in any other sports? :)"}] },
+  { who:"Alex", num:"+44 7000 000001", time:"6:42pm", sport:"Football", kind:"reply", stage:"lead", flow:"football", step:3,
+    msg:"Yeah Saturday works for me! How do I sign up?",
+    draft:"https://www.meetup.com/waldorflondon/events/...\n\nPlease go through the description on this link for all the details and select attend!",
+    note:"Haven't asked about other sports yet.",
+    ctx:[{me:1,t:"Hey Alex,\nThank you for reaching out!",w:"Thu"},{me:0,t:"I'm in Stratford, can travel"},{me:1,t:"Would you like to play football next Saturday 1pm?"}] },
+  { who:"Neha", num:"+44 7000 000007", time:"5:20pm", sport:"Badminton", kind:"reply", stage:"next",
+    msg:"Hey! Any games this week?",
+    draft:"Hey Neha!\n\nHere are the games next week:\n\n- Wed 25 Nov, 7:15-9:15pm in Island Gardens\n- Sun 29 Nov, 12-2pm in Custom House\n\nDoes either of the both work for you? :)",
+    note:"Regular: played 4 times, Intermediate." },
+  { who:"Sam", num:"+44 7000 000003", time:"5:58pm", sport:"Badminton · Wed 25/11", kind:"reply", stage:"pay",
     msg:"Done 👍",
     draft:"Perfect, thank you Sam!\n\nSee you Wednesday :)",
     note:"Not sure if this means paid or selected attend — check context.",
     ctx:[{me:1,t:"https://www.meetup.com/waldorflondon/events/...",w:"Today"},{me:1,t:"Please select attend here"},{me:1,t:"Here are the bank deets:\nName: Waldorf Group ..."}] },
-  { who:"Jordan", num:"+44 7000 000004", time:"4:15pm", sport:"Can't come", kind:"fyi",
+  { who:"Jordan", num:"+44 7000 000004", time:"4:15pm", sport:"Badminton", kind:"fyi", stage:"away",
     msg:"Sorry, I'm away next week, will let you know when I'm back",
     draft:"No worries Jordan!\n\nLet me know whenever you're back and I'll send you the next games :)",
     note:"Follow-up set for Mon 30/11." },
-  { who:"Taylor", num:"+44 7000 000005", time:"3:02pm", sport:"Badminton · Sun 22/11", kind:"fyi",
+  { who:"Taylor", num:"+44 7000 000005", time:"3:02pm", sport:"Badminton · Sun 22/11", kind:"fyi", stage:"",
     msg:"Thank you, see you later!", draft:"", note:"No reply needed." },
 ];
 const colors = ["#2a7184","#e07a5f","#6a8caf","#81b29a","#c08ad8","#d4a72c"];
-let filter = "reply";
+let filter = "reply", stage = "";
 const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
 function render() {
   const list = document.getElementById("list");
-  const shown = items.filter(x => filter==="all" || x.kind===filter);
+  const shown = items.filter(x => (filter==="all" || x.kind===filter) && (!stage || x.stage===stage));
   document.getElementById("n-reply").textContent = items.filter(x=>x.kind==="reply").length;
   document.getElementById("n-fyi").textContent = items.filter(x=>x.kind==="fyi").length;
   if (!shown.length) { list.innerHTML = '<div class="empty">All caught up 🪷</div>'; return; }
   list.innerHTML = shown.map((x, k) => {
     const id = items.indexOf(x);
-    const chips = `<span class="chip">${esc(x.sport)}</span>` + (x.urgent?'<span class="chip urgent">Today</span>':'') + (x.kind==="fyi"?'<span class="chip fyi">FYI</span>':'');
+    const SL={urgent:['urgent','🔥 Urgent'],lead:['lead','🌱 New lead'],next:['next','📅 Next game'],pay:['pay','💷 Payment'],away:['fyi','✈️ Away']};
+    const chips = `<span class="chip">${esc(x.sport)}</span>` + (x.stage&&SL[x.stage]?`<span class="chip ${SL[x.stage][0]}">${SL[x.stage][1]}</span>`:'') + (x.kind==="fyi"&&x.stage!=="away"?'<span class="chip fyi">FYI</span>':'');
+    const f = x.flow && FLOW[x.flow];
+    const steps = f ? `<div class="steps">${f.map((_,j)=>`<i class="${j<x.step?'d':j===x.step?'n':''}"></i>`).join('')}</div><div class="stepl">Step ${x.step+1} of ${f.length}: <b>${f[x.step]}</b> · ${x.flow} flow</div>` : '';
     const ctx = x.ctx ? `<div class="ctx" id="ctx${id}">${x.ctx.map(m => (m.w?`<div class="when">${m.w}</div>`:"") + `<div class="b ${m.me?'me':'them'}">${esc(m.t)}</div>`).join("")}<div class="b them"><i>${esc(x.msg)}</i></div></div>` : "";
     return `<div class="card">
       <div class="head"><div class="av" style="background:${colors[id%colors.length]}">${x.who[0]}</div>
         <div><div class="who">${esc(x.who)}</div><div class="meta">${x.num}</div></div><div class="time">${x.time}</div></div>
-      <div class="chips">${chips}</div>
+      <div class="chips">${chips}</div>${steps}
       <div class="msg">"${esc(x.msg)}"</div>
       ${x.draft ? `<div class="lbl">Draft reply</div><div class="draft">${esc(x.draft)}</div>` : ""}
       ${x.note ? `<div class="note">💡 ${esc(x.note)}</div>` : ""}
@@ -124,6 +155,8 @@ function render() {
 }
 function tog(id, btn) { const el = document.getElementById("ctx"+id); el.classList.toggle("on"); btn.textContent = el.classList.contains("on") ? "Hide context" : "Show context"; }
 function copy(id) { navigator.clipboard && navigator.clipboard.writeText(items[id].draft); const t=document.getElementById("toast"); t.classList.add("on"); setTimeout(()=>t.classList.remove("on"),1400); }
+document.querySelectorAll(".stages button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".stages button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); stage=b.dataset.s; render(); });
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); filter=b.dataset.f; render(); });
 render();
