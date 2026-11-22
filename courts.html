@@ -53,7 +53,7 @@ main{padding:10px;max-width:1100px;margin:auto}
 <main>
 <div class="chips"><span class="lbl">Venues</span><span id="venues" class="chips" style="margin:0"></span></div>
 <div class="chips"><span class="lbl">Min courts</span><span id="minc" class="chips" style="margin:0"></span></div>
-<div class="chips"><button class="chip on" id="fits">Weekday evenings / weekends only</button>
+<div class="chips"><button class="chip on" id="fits">Weekday evenings / weekends only</button><button class="chip" id="twoh">2 hours in a row</button>
   <span class="lbl" style="margin-left:6px">View</span><button class="chip" data-view="month">Month</button><button class="chip" data-view="week">Week</button></div>
 <div class="bar"><button id="prev">‹</button><b id="label"></b><button id="next">›</button></div>
 <div class="legend" id="legend"></div>
@@ -67,7 +67,7 @@ const COL={'Royal Docks':'#2e6fb7','Bow School':'#8e44ad','Somers Town':'#1e8449
 const AB={'Royal Docks':'RD','Bow School':'Bow','Somers Town':'ST',"George Green's":'GG'};
 const VS=Object.keys(COL);
 const H0=8,H1=22;              // timeline 08:00–22:00
-let D=[],venues=new Set(VS),fits=true,minC=2,view='month',cur=null;
+let D=[],venues=new Set(VS),fits=true,twoH=false,minC=2,view='month',cur=null;
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const mins=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
 function span(s){ // returns [start,end] minutes
@@ -78,18 +78,31 @@ const fmt=m=>{const x=t12(m);return x.t+x.ap;};
 const rng=(a,b)=>{const x=t12(a),y=t12(b);return (x.ap===y.ap?x.t:x.t+x.ap)+'–'+y.t+y.ap;};
 const hlab=h=>{const x=t12(h*60);return x.t+x.ap;};
 fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{D=j.slots;$('upd').textContent='Updated '+j.updated;draw();});
-function rows(){return D.filter(s=>{ if(!venues.has(s[2])||s[4]<minC) return false; if(!fits) return true;
-  if(['Sat','Sun'].includes(s[1])) return true; return span(s)[1]>19*60+30; });}
+function merged(list){   // join back-to-back slots (gap ≤ 5 min) at the same venue; courts = fewest free across the run
+  const g={}; list.forEach(s=>(g[s[0]+'|'+s[2]]=g[s[0]+'|'+s[2]]||[]).push(s)); const out=[];
+  for (const k in g){ const a=g[k].map(s=>({s,r:span(s)})).sort((x,y)=>x.r[0]-y.r[0]); let c=null;
+    for (const x of a){ if(c && x.r[0]-c.e<=5){ c.e=Math.max(c.e,x.r[1]); c.n=Math.min(c.n,x.s[4]); }
+      else { if(c) out.push(c); c={s:x.s,b:x.r[0],e:x.r[1],n:x.s[4]}; } }
+    if(c) out.push(c); }
+  return out.map(c=>{const t=[...c.s]; t[3]=fmt24(c.b)+'-'+fmt24(c.e); t[4]=c.n; return t;});
+}
+const fmt24=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+function rows(){
+  let r=D.filter(s=>venues.has(s[2])&&s[4]>=minC);
+  if (twoH) r=merged(r).filter(s=>{const[a,b]=span(s);return b-a>=120;});
+  return r.filter(s=>{ if(!fits) return true; if(['Sat','Sun'].includes(s[1])) return true; return span(s)[1]>19*60+30; });
+}
 function controls(){
   $('venues').innerHTML=VS.map(v=>`<button class="chip ${venues.has(v)?'on':''}" data-v="${v}" style="${venues.has(v)?'background:'+COL[v]+';border-color:'+COL[v]:''}">${v}</button>`).join('');
   document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{const v=b.dataset.v;venues.has(v)?venues.delete(v):venues.add(v);draw();});
   $('minc').innerHTML=[1,2,3,4,5,6].map(n=>`<button class="chip ${minC===n?'on':''}" data-c="${n}">${n}+</button>`).join('');
   document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{minC=+b.dataset.c;draw();});
-  $('fits').className='chip '+(fits?'on':'');
+  $('fits').className='chip '+(fits?'on':''); $('twoh').className='chip '+(twoH?'on':'');
   document.querySelectorAll('[data-view]').forEach(b=>{b.className='chip '+(view===b.dataset.view?'on':'');b.onclick=()=>{view=b.dataset.view;draw();};});
   $('legend').innerHTML=VS.filter(v=>venues.has(v)).map(v=>`<span><i class="sw" style="background:${COL[v]}"></i>${AB[v]} = ${v}</span>`).join('')+'<span class="muted">Colour = venue</span>';
 }
 $('fits').onclick=()=>{fits=!fits;draw();};
+$('twoh').onclick=()=>{twoH=!twoH;draw();};
 $('prev').onclick=()=>{cur=view==='month'?new Date(cur.getFullYear(),cur.getMonth()-1,1):new Date(cur.getTime()-7*864e5);draw();};
 $('next').onclick=()=>{cur=view==='month'?new Date(cur.getFullYear(),cur.getMonth()+1,1):new Date(cur.getTime()+7*864e5);draw();};
 $('dClose').onclick=()=>$('dayModal').style.display='none';
