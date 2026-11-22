@@ -48,13 +48,16 @@ main{padding:10px;max-width:1100px;margin:auto}
 #dayModal h2 button{border:none;background:#eef1f3;border-radius:18px;padding:8px 14px;font-size:16px}
 .list .row{display:flex;justify-content:space-between;background:#fff;border-radius:10px;padding:10px 12px;margin:6px 0;font-size:16px;border-left:6px solid}
 .muted{color:#5d6d7e;font-size:14px}
+.gm{background:#1c2833;color:#fff;border-radius:6px;padding:3px 4px;line-height:1.2}
+.gm b{display:block;font-size:13px}
+.gm span{font-size:11px;opacity:.85}
 </style></head><body>
 <header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p></header>
 <main>
 <div class="chips"><span class="lbl">Venues</span><span id="venues" class="chips" style="margin:0"></span></div>
 <div class="chips"><span class="lbl">Length</span><span id="dur" class="chips" style="margin:0"></span></div>
 <div class="chips"><span class="lbl">Min courts</span><span id="minc" class="chips" style="margin:0"></span></div>
-<div class="chips"><button class="chip on" id="fits">Weekday evenings / weekends only</button>
+<div class="chips"><button class="chip on" id="ours">⭐ Our booked games</button><button class="chip on" id="fits">Weekday evenings / weekends only</button>
   <span class="lbl" style="margin-left:6px">View</span><button class="chip" data-view="month">Month</button><button class="chip" data-view="week">Week</button></div>
 <div class="bar"><button id="prev">‹</button><b id="label"></b><button id="next">›</button></div>
 <div class="legend" id="legend"></div>
@@ -64,11 +67,12 @@ main{padding:10px;max-width:1100px;margin:auto}
 <div id="dayModal"><div class="box"><h2><span id="dTitle"></span><button id="dClose">Close ✕</button></h2><div id="dGrid"></div><div id="dList" class="list"></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
+const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const COL={'Royal Docks':'#2e6fb7','Bow School':'#8e44ad','Somers Town':'#1e8449',"George Green's":'#d68910'};
 const AB={'Royal Docks':'RD','Bow School':'Bow','Somers Town':'ST',"George Green's":'GG'};
 const VS=Object.keys(COL);
 const H0=8,H1=22;              // timeline 08:00–22:00
-let D=[],venues=new Set(VS),fits=true,dur=0,minC=2,view='month',cur=null;
+let G=[],ours=true,D=[],venues=new Set(VS),fits=true,dur=0,minC=2,view='month',cur=null;
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const mins=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
 function span(s){ // returns [start,end] minutes
@@ -78,7 +82,7 @@ const t12=m=>{let h=Math.floor(m/60),mm=m%60,ap=h>=12?'pm':'am';h=h%12||12;retur
 const fmt=m=>{const x=t12(m);return x.t+x.ap;};
 const rng=(a,b)=>{const x=t12(a),y=t12(b);return (x.ap===y.ap?x.t:x.t+x.ap)+'–'+y.t+y.ap;};
 const hlab=h=>{const x=t12(h*60);return x.t+x.ap;};
-fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{D=j.slots;$('upd').textContent='Updated '+j.updated;draw();});
+fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{D=j.slots;G=j.games||[];$('upd').textContent='Updated '+j.updated;draw();});
 function merged(list){   // join back-to-back slots (gap ≤ 5 min) at the same venue; courts = fewest free across the run
   const g={}; list.forEach(s=>(g[s[0]+'|'+s[2]]=g[s[0]+'|'+s[2]]||[]).push(s)); const out=[];
   for (const k in g){ const a=g[k].map(s=>({s,r:span(s)})).sort((x,y)=>x.r[0]-y.r[0]); let c=null;
@@ -98,13 +102,15 @@ function controls(){
   document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{const v=b.dataset.v;venues.has(v)?venues.delete(v):venues.add(v);draw();});
   $('minc').innerHTML=[1,2,3,4,5,6].map(n=>`<button class="chip ${minC===n?'on':''}" data-c="${n}">${n}+</button>`).join('');
   document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{minC=+b.dataset.c;draw();});
-  $('fits').className='chip '+(fits?'on':'');
+  $('fits').className='chip '+(fits?'on':''); $('ours').className='chip '+(ours?'on':'');
   $('dur').innerHTML=[[0,'Any'],[60,'1 hr'],[90,'1.5 hr'],[120,'2 hr'],[121,'2+ hr']].map(([v,l])=>`<button class="chip ${dur===v?'on':''}" data-m="${v}">${l}</button>`).join('');
   document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{dur=+b.dataset.m;draw();});
   document.querySelectorAll('[data-view]').forEach(b=>{b.className='chip '+(view===b.dataset.view?'on':'');b.onclick=()=>{view=b.dataset.view;draw();};});
   $('legend').innerHTML=VS.filter(v=>venues.has(v)).map(v=>`<span><i class="sw" style="background:${COL[v]}"></i>${AB[v]} = ${v}</span>`).join('')+'<span class="muted">Colour = venue</span>';
 }
 $('fits').onclick=()=>{fits=!fits;draw();};
+$('ours').onclick=()=>{ours=!ours;draw();};
+const gamesOn=k=>ours?G.filter(g=>g[0]===k):[];
 $('prev').onclick=()=>{cur=view==='month'?new Date(cur.getFullYear(),cur.getMonth()-1,1):new Date(cur.getTime()-7*864e5);draw();};
 $('next').onclick=()=>{cur=view==='month'?new Date(cur.getFullYear(),cur.getMonth()+1,1):new Date(cur.getTime()+7*864e5);draw();};
 $('dClose').onclick=()=>$('dayModal').style.display='none';
@@ -130,6 +136,7 @@ function draw(){
     for(let i=0;i<first;i++) h+='<div></div>';
     for(let d=1;d<=n;d++){const k=iso(new Date(cur.getFullYear(),cur.getMonth(),d)),sl=(by[k]||[]).slice().sort((x,y)=>span(x)[0]-span(y)[0]);
       h+=`<div class="cell ${k<today?'past':''} ${k===today?'today':''}" data-d="${k}"><div class="dn">${d}</div>
+        ${gamesOn(k).map(g=>`<div class="gm"><b>⭐ ${rng(mins(g[1]),mins(g[2]))}</b><span>${esc(g[3])}</span></div>`).join('')}
         ${sl.map(s=>{const[a,b]=span(s);return `<div class="mc" style="background:${COL[s[2]]}22;border-color:${COL[s[2]]}"><b>${rng(a,b)}</b><span>${s[4]} court${s[4]>1?'s':''}</span></div>`;}).join('')}</div>`;}
     $('view').innerHTML=`<div class="mgrid">${h}</div>`;
   } else {
@@ -139,11 +146,13 @@ function draw(){
     let g=`<div class="tgrid" style="grid-template-columns:44px repeat(7,minmax(92px,1fr))"><div class="th"></div>`;
     g+=days.map(d=>`<div class="th" data-d="${iso(d)}">${d.toLocaleDateString('en-GB',{weekday:'short'})}<small>${d.getDate()} ${d.toLocaleDateString('en-GB',{month:'short'})}</small></div>`).join('');
     g+=`<div class="tlab" style="height:${H}px">${[...Array(H1-H0+1)].map((_,i)=>`<div style="top:${i*HP}px">${hlab(H0+i)}</div>`).join('')}</div>`;
-    g+=days.map(d=>{const k=iso(d);return `<div class="tcol" style="height:${H}px;${k<today?'opacity:.4':''}" data-d="${k}">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(by[k]||[],lanes,'blk2',(s,a,b)=>`${AB[s[2]]} ×${s[4]}<small>${rng(a,b)}</small>`)}</div>`;}).join('');
+    g+=days.map(d=>{const k=iso(d);return `<div class="tcol" style="height:${H}px;${k<today?'opacity:.4':''}" data-d="${k}">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(by[k]||[],lanes,'blk2',(s,a,b)=>`${AB[s[2]]} ×${s[4]}<small>${rng(a,b)}</small>`)}${gameBlocks(k)}</div>`;}).join('');
     $('view').innerHTML=g+'</div>';
   }
   document.querySelectorAll('[data-d]').forEach(e=>e.onclick=()=>openDay(e.dataset.d));
 }
+function gameBlocks(k){const tot=(H1-H0)*60;return gamesOn(k).map(g=>{const a=mins(g[1]),b=mins(g[2]);
+  return `<div class="blk2" style="top:${(a-H0*60)/tot*100}%;height:${(b-a)/tot*100}%;left:2px;right:2px;background:#1c2833;z-index:3">⭐ Our game<small>${rng(a,b)} · ${esc(g[3])}</small></div>`;}).join('');}
 function openDay(k){
   const sl=(byDay()[k]||[]).slice().sort((x,y)=>span(x)[0]-span(y)[0]), lanes=VS.filter(v=>venues.has(v));
   const d=new Date(k+'T12:00:00');
@@ -153,7 +162,8 @@ function openDay(k){
   g+=`<div class="tlab" style="height:${H}px">${[...Array(H1-H0+1)].map((_,i)=>`<div style="top:${i*HP}px">${hlab(H0+i)}</div>`).join('')}</div>`;
   g+=lanes.map(v=>`<div class="tcol" style="height:${H}px">${[...Array(H1-H0)].map((_,i)=>`<div class="hrl" style="top:${i*HP}px"></div>`).join('')}${blocks(sl.filter(s=>s[2]===v),[v],'blk2',(s,a,b)=>`${s[4]} court${s[4]>1?'s':''} free<small>${rng(a,b)}</small>`)}</div>`).join('');
   $('dGrid').innerHTML=g+'</div>';
-  $('dList').innerHTML=sl.length?sl.map(s=>{const[a,b]=span(s);return `<div class="row" style="border-left-color:${COL[s[2]]}"><b>${rng(a,b)}</b><span>${s[2]}</span><span><b>${s[4]}</b> court${s[4]>1?'s':''} · ${s[5]}</span></div>`;}).join(''):'<p class="muted">Nothing free for these filters.</p>';
+  const gl=gamesOn(k).map(g=>`<div class="row" style="border-left-color:#1c2833;background:#1c2833;color:#fff"><b>⭐ ${rng(mins(g[1]),mins(g[2]))}</b><span>${esc(g[4])}</span><span>${esc(g[3])}</span></div>`).join('');
+  $('dList').innerHTML=gl+(sl.length?sl.map(s=>{const[a,b]=span(s);return `<div class="row" style="border-left-color:${COL[s[2]]}"><b>${rng(a,b)}</b><span>${s[2]}</span><span><b>${s[4]}</b> court${s[4]>1?'s':''} · ${s[5]}</span></div>`;}).join(''):'<p class="muted">Nothing free for these filters.</p>');
   $('dayModal').style.display='block'; window.scrollTo(0,0);
 }
 </script></body></html>
