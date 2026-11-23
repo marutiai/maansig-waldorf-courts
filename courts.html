@@ -13,6 +13,7 @@ main{padding:10px;max-width:1100px;margin:auto}
 #notesBox{display:block;position:sticky;top:10px;background:#fff;border-radius:12px;padding:8px 10px;box-shadow:0 1px 3px #0002}
 #notesBox h2{margin:2px 0 6px;font-size:16px;display:flex;justify-content:space-between;align-items:center}
 #notes{width:300px;height:500px;min-width:180px;min-height:120px;max-width:60vw;resize:both;font:14px/1.4 system-ui;border:1px solid #ccd;border-radius:8px;padding:8px;box-sizing:border-box}
+#calc{margin-top:10px;border-top:1px solid #dde;padding-top:8px;font-size:13px}#calc h2{font-size:16px;margin:2px 0 6px}#calc label{display:flex;justify-content:space-between;align-items:center;margin:3px 0;gap:6px}#calc input,#calc select{width:120px;padding:3px;border:1px solid #ccd;border-radius:6px;font-size:13px}#calc .res{background:#f4f6f8;border-radius:8px;padding:6px 8px;margin:6px 0;line-height:1.6}#calc .res b.pos{color:#1e8449}#calc .res b.neg{color:#c0392b}#calc button.cb{font-size:12px;padding:3px 8px;border:1px solid #ccd;border-radius:6px;background:#fff;cursor:pointer;margin:2px 4px 2px 0}#cmp table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}#cmp td,#cmp th{border-bottom:1px solid #eee;padding:2px 3px;text-align:left}.bar{height:14px;border-radius:3px;display:inline-block;vertical-align:middle}
 #notesBox .sz button{font-size:12px;padding:2px 6px;margin-left:3px;border:1px solid #ccd;border-radius:6px;background:#f4f6f8;cursor:pointer}}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;align-items:center}
 .chip{border:2px solid #d5dbe0;background:#fff;border-radius:22px;padding:9px 15px;font-size:15px;font-weight:500}
@@ -78,7 +79,17 @@ main{padding:10px;max-width:1100px;margin:auto}
 <div class="legend" id="legend"></div>
 <div id="wrap"><div id="view"></div>
 <aside id="notesBox"><h2>📝 Notes<span class="sz"><button data-sz="tall">Tall</button><button data-sz="square">Square</button><button data-sz="wide">Wide</button></span></h2>
-<textarea id="notes" placeholder="Your notes… (saved on this computer). Drag the bottom-right corner to resize."></textarea><div class="muted" id="notesSaved" style="font-size:12px"></div></aside></div>
+<textarea id="notes" placeholder="Your notes… (saved on this computer). Drag the bottom-right corner to resize."></textarea><div class="muted" id="notesSaved" style="font-size:12px"></div><div id="calc"><h2>💷 Profit calculator</h2>
+<label>Venue <select id="cV"></select></label>
+<label>£ per court/hr <input id="cR" type="number" step="0.01"></label>
+<label>Courts <input id="cC" type="number" min="1" max="6" value="2"></label>
+<label>Hours <select id="cH"><option>1</option><option>1.5</option><option selected>2</option><option>2.5</option><option>3</option></select></label>
+<label>Players <input id="cP" type="number" min="0" value="16"></label>
+<label>£ per player <input id="cT" type="number" step="0.5" value="14"></label>
+<label>Racket hires (+£2) <input id="cK" type="number" min="0" value="0"></label>
+<div class="res" id="cOut"></div>
+<button class="cb" id="cAdd">➕ Add to comparison</button><button class="cb" id="cClr">Clear comparison</button>
+<div id="cmp"></div></div></aside></div>
 <div id="plan"></div>
 <p class="muted">Tap a day to open it. Tap a slot to add it to <b>My plan</b> (tap again to remove). Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days. In2Sports (Canary Wharf) is entered by hand from Maansi's list. Borough Academy shows times when at least 1 court is free (it doesn't say how many), so set Min courts to 1 to see it.</p>
 </main>
@@ -224,4 +235,20 @@ function openDay(k){ openK=k;
  new ResizeObserver(()=>{if(n.offsetWidth)save();}).observe(n);
  const P={tall:[300,650],square:[400,400],wide:[560,280]};
  document.querySelectorAll('[data-sz]').forEach(b=>b.onclick=()=>{const[w,h]=P[b.dataset.sz];n.style.width=w+'px';n.style.height=h+'px';save();});})();
+
+(()=>{const V=[['GGS (peak)',19],['GGS (off-peak)',17],['GGS whole hall (3 courts)',0,3,64],['Royal Docks',18.5],['Bow School',13],['Somers Town',16],['Somers Town (block)',14],['LSBU (weekday eve)',17],['LSBU (weekend)',15],['Borough Academy (single, inc VAT)',25.2],['Borough Academy whole hall (4, inc VAT)',0,4,83.28],['In2Sports',0],['Custom',0]];
+ const sel=$('cV');if(!sel)return;sel.innerHTML=V.map((v,i)=>`<option value="${i}">${v[0]}</option>`).join('');
+ let cmp=JSON.parse(localStorage.getItem('wfCmp')||'[]');
+ const g=()=>{const v=V[+sel.value],h=+$('cH').value,hall=!!v[2],cts=+$('cC').value,cost=hall?v[3]*h:(+$('cR').value||0)*cts*h,pl=+$('cP').value||0,tk=+$('cT').value||0,rk=(+$('cK').value||0)*2,rev=pl*tk+rk,pr=rev-cost;
+   return {name:v[0],h,cts,cost,pl,tk,rev,pr,be:tk?Math.ceil(cost/tk):0,cap:cts*8};};
+ const out=()=>{const r=g();$('cOut').innerHTML=`Court cost: <b>£${r.cost.toFixed(2)}</b><br>Takings: <b>£${r.rev.toFixed(2)}</b><br>Profit: <b class="${r.pr>=0?'pos':'neg'}">£${r.pr.toFixed(2)}</b>${r.pl?` (£${(r.pr/r.pl).toFixed(2)}/player)`:''}<br>Break-even: <b>${r.be} players</b> · Full = ${r.cap} (8/court)`;};
+ const setV=()=>{const v=V[+sel.value];if(v[2]){$('cC').value=v[2];$('cC').disabled=true;$('cR').value=(v[3]/v[2]).toFixed(2);$('cR').disabled=true;}else{$('cC').disabled=false;$('cR').disabled=false;if(v[1])$('cR').value=v[1];}$('cP').value=(+$('cC').value)*8;out();};
+ const draw=()=>{if(!cmp.length){$('cmp').innerHTML='';return;}const mx=Math.max(...cmp.map(r=>Math.abs(r.pr)),1);
+   $('cmp').innerHTML='<table><tr><th>Option</th><th>Cost</th><th>Profit</th><th></th></tr>'+cmp.map((r,i)=>`<tr><td>${r.name}<br><span class="muted">${r.cts} ct · ${r.h}h · ${r.pl} pl × £${r.tk}</span></td><td>£${r.cost.toFixed(0)}</td><td><b>£${r.pr.toFixed(0)}</b><br><span class="bar" style="width:${Math.round(Math.abs(r.pr)/mx*90)}px;background:${r.pr>=0?'#1e8449':'#c0392b'}"></span></td><td><button class="cb" data-rm="${i}">✕</button></td></tr>`).join('')+'</table>';
+   document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{cmp.splice(+b.dataset.rm,1);localStorage.setItem('wfCmp',JSON.stringify(cmp));draw();});};
+ sel.onchange=setV;$('cC').oninput=()=>{$('cP').value=(+$('cC').value)*8;out();};
+ ['cR','cH','cP','cT','cK'].forEach(id=>$(id).oninput=out);$('cH').onchange=()=>{$('cT').value=+$('cH').value===1?10:14;out();};
+ $('cAdd').onclick=()=>{cmp.push(g());localStorage.setItem('wfCmp',JSON.stringify(cmp));draw();};
+ $('cClr').onclick=()=>{cmp=[];localStorage.removeItem('wfCmp');draw();};
+ setV();draw();})();
 </script></body></html>
