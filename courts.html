@@ -86,7 +86,7 @@ let G=[],ours=true,D=[],venues=new Set(VS),fits=true,dur=+(localStorage.getItem(
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const mins=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
 function span(s){ // returns [start,end] minutes
-  const t=s[3]; if(t.includes('(55 min)')){const a=mins(t.slice(0,5));return[a,a+55];}
+  const t=s[3]; if(t.includes('(55 min)')){const a=mins(t.slice(0,5));return[a,a+60];}  // GGS books hourly (55 min play), so back-to-back hours join up
   const [a,b]=t.split('-'); return [mins(a),mins(b)]; }
 const t12=m=>{let h=Math.floor(m/60),mm=m%60,ap=h>=12?'pm':'am';h=h%12||12;return {t:h+(mm?':'+String(mm).padStart(2,'0'):''),ap};};
 const fmt=m=>{const x=t12(m);return x.t+x.ap;};
