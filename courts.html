@@ -69,6 +69,15 @@ main{padding:10px;max-width:1100px;margin:auto}
 .gm span{font-size:11px;opacity:.85}
 
 .tabs{display:flex;gap:6px;margin-top:10px}.tabs button{border:none;border-radius:8px 8px 0 0;padding:8px 14px;font-size:15px;background:#3b6a96;color:#fff;cursor:pointer}.tabs button.on{background:#f4f6f8;color:#1c2833;font-weight:700}
+#vt{display:none;padding:10px;max-width:1100px;margin:auto;font-size:17px}
+#vt .card{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 3px #0001;margin-bottom:10px}
+#vt .vh{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+#vt .st{padding:3px 10px;border-radius:12px;font-size:14px;color:#fff}
+#vt .vg{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 14px;margin-top:6px;color:#334}
+#vt input,#vt select,#vt textarea{width:100%;padding:7px;border:1px solid #ccd;border-radius:6px;font-size:17px;box-sizing:border-box}
+#vt .fg{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+#vt button{padding:7px 14px;border-radius:8px;border:1px solid #ccd;background:#f4f6f8;font-size:16px;cursor:pointer}
+#vt .flt button.on{background:#2c3e50;color:#fff}
 #pt{display:none;padding:10px;max-width:1500px;margin:auto}
 #pt .grid{display:grid;grid-template-columns:380px 1fr;gap:12px}@media(max-width:900px){#pt .grid{grid-template-columns:1fr}}
 #pt .card{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 3px #0001;margin-bottom:12px}
@@ -85,7 +94,7 @@ main{padding:10px;max-width:1100px;margin:auto}
 #pt .prog{height:16px;background:#eef1f3;border-radius:8px;overflow:hidden}#pt .prog i{display:block;height:100%;background:linear-gradient(90deg,#d68910,#1e8449)}
 #pt .opts{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}#pt .opts button{border:1px solid #ccd;background:#fff;border-radius:18px;padding:7px 12px;font-size:16px;cursor:pointer}#pt .opts button.on{background:#1f4e79;color:#fff;border-color:#1f4e79}#pt .hid{display:none!important}#pt svg text{font:13px system-ui;fill:#445}#pt small{font-size:15px}
 </style></head><body>
-<header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p><div class="tabs"><button id="tCal" class="on">📅 Calendar</button><button id="tPro">💷 Profit</button></div></header>
+<header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p><div class="tabs"><button id="tCal" class="on">📅 Calendar</button><button id="tPro">💷 Profit</button><button id="tVen">📍 Venues</button></div></header>
 <main>
 <div class="chips"><span class="lbl">Venues</span><span id="venues" class="chips" style="margin:0"></span></div>
 <div class="chips"><span class="lbl">Length</span><span id="dur" class="chips" style="margin:0"></span></div>
@@ -110,6 +119,12 @@ main{padding:10px;max-width:1100px;margin:auto}
 <div id="plan"></div>
 <p class="muted">Tap a day to open it. Tap a slot to add it to <b>My plan</b> (tap again to remove). Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days. In2Sports (Canary Wharf) is entered by hand from Maansi's list. Borough Academy shows times when at least 1 court is free (it doesn't say how many), so set Min courts to 1 to see it.</p>
 </main>
+<section id="vt"><div class="card"><h3 style="margin:0 0 8px">📍 Venue options</h3>
+<div class="fg"><input id="vN" placeholder="Venue name"><select id="vS"><option>Talking</option><option>Enquiry sent</option><option>Available</option><option>Booked / regular</option><option>Too expensive</option><option>Not suitable</option></select>
+<input id="vW" placeholder="Days & times (e.g. Sat 10am–12pm)"><input id="vP" type="number" step="0.01" placeholder="£ per court per hour"><input id="vC" type="number" placeholder="Courts"><input id="vA" placeholder="Area / station"><input id="vK" placeholder="Contact (email/phone/link)"></div>
+<textarea id="vO" rows="2" placeholder="Notes" style="margin-top:8px"></textarea>
+<div style="margin-top:8px;display:flex;gap:8px"><button id="vSave">➕ Save venue</button><button id="vCancel" style="display:none">Cancel edit</button></div></div>
+<div class="flt" id="vF" style="margin:6px 0 10px;display:flex;gap:6px;flex-wrap:wrap"></div><div id="vL"></div></section>
 <section id="pt"><div class="grid"><div>
 <div class="card"><h3>⚙️ Session</h3>
 <label>Venue <select id="pV"></select></label>
@@ -291,8 +306,9 @@ function openDay(k){ openK=k;
 
 (()=>{const PV=[['GGS (peak)',19],['GGS (off-peak)',17],['GGS whole hall (3 courts)',0,3,64],['Royal Docks',18.5],['Bow School',13],['Somers Town',16],['Somers Town (block)',14],['LSBU (weekday eve)',17],['LSBU (weekend)',15],['Borough Academy (single, inc VAT)',25.2],['Borough Academy whole hall (4, inc VAT)',0,4,83.28],['In2Sports',0],['Custom',0]];
  const q=$;let sc=JSON.parse(localStorage.getItem('wfScen')||'[]');const W=4.33;
- q('tCal').onclick=()=>{q('tCal').className='on';q('tPro').className='';document.querySelector('main').style.display='';q('pt').style.display='none';};
- q('tPro').onclick=()=>{q('tPro').className='on';q('tCal').className='';document.querySelector('main').style.display='none';q('pt').style.display='block';calc();};
+ const tab=t=>{['tCal','tPro','tVen'].forEach(k=>q(k).className=k==t?'on':'');document.querySelector('main').style.display=t=='tCal'?'':'none';q('pt').style.display=t=='tPro'?'block':'none';q('vt').style.display=t=='tVen'?'block':'none';if(t=='tPro')calc();if(t=='tVen')vDraw();};
+ q('tCal').onclick=()=>tab('tCal');q('tPro').onclick=()=>tab('tPro');q('tVen').onclick=()=>tab('tVen');
+ 
  q('pV').innerHTML=PV.map((v,i)=>`<option value="${i}">${v[0]}</option>`).join('');
  const m=n=>'£'+Math.round(n).toLocaleString('en-GB'),m2=n=>'£'+n.toFixed(2);
  const costOf=(v,cts,h,rate)=>v[2]?v[3]*h:rate*cts*h;
@@ -336,4 +352,22 @@ function openDay(k){ openK=k;
    d.onclick=e=>{const b=e.target.closest('button');if(!b||el.disabled)return;el.value=b.dataset.o;(el.onchange||el.oninput)?.call(el);if(el.oninput&&el.onchange&&id!=='pV'&&id!=='pH')el.oninput.call(el);hl();};}
  const hl=()=>document.querySelectorAll('#pt .opts').forEach(d=>{const v=q(d.dataset.for).value;d.querySelectorAll('button').forEach(b=>b.classList.toggle('on',+b.dataset.o===+v&&b.dataset.o!==''&&String(+b.dataset.o)===String(+v)));});
  document.getElementById('pt').addEventListener('input',hl);hl();})();
+
+let VN=JSON.parse(localStorage.getItem('wfVenues')||'null')||[{n:'LSBU',s:'Talking',w:'Sat 10am–12pm',p:15,c:'',a:'Elephant & Castle',k:'',o:'Only Saturday morning available'}];
+let vEd=-1,vFl='All';const SC={'Talking':'#2980b9','Enquiry sent':'#8e44ad','Available':'#16a085','Booked / regular':'#1e8449','Too expensive':'#c0392b','Not suitable':'#7f8c8d'};
+const vE=x=>String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const vKeys={n:'vN',s:'vS',w:'vW',p:'vP',c:'vC',a:'vA',k:'vK',o:'vO'};
+function vSaveAll(){localStorage.setItem('wfVenues',JSON.stringify(VN));}
+function vDraw(){const $=id=>document.getElementById(id);
+ $('vF').innerHTML=['All',...Object.keys(SC)].map(k=>`<button class="${k==vFl?'on':''}" data-f="${k}">${k}</button>`).join('');
+ $('vF').querySelectorAll('button').forEach(b=>b.onclick=()=>{vFl=b.dataset.f;vDraw();});
+ const L=VN.map((v,i)=>[v,i]).filter(([v])=>vFl=='All'||v.s==vFl);
+ $('vL').innerHTML=L.length?L.map(([v,i])=>`<div class="card"><div class="vh"><b style="font-size:19px">${vE(v.n)}</b><span class="st" style="background:${SC[v.s]||'#555'}">${vE(v.s)}</span></div>
+ <div class="vg">${v.w?`<div>🕒 ${vE(v.w)}</div>`:''}${v.p?`<div>💷 £${(+v.p).toFixed(2)}/court/hr</div>`:''}${v.c?`<div>🏸 ${vE(v.c)} courts</div>`:''}${v.a?`<div>📍 ${vE(v.a)}</div>`:''}${v.k?`<div>☎️ ${vE(v.k)}</div>`:''}</div>
+ ${v.o?`<div style="margin-top:6px;color:#556">📝 ${vE(v.o)}</div>`:''}<div style="margin-top:8px;display:flex;gap:6px"><button data-e="${i}">✏️ Edit</button><button data-d="${i}">🗑 Delete</button></div></div>`).join(''):'<p>No venues here yet.</p>';
+ $('vL').querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{vEd=+b.dataset.e;const v=VN[vEd];for(const k in vKeys)$(vKeys[k]).value=v[k]??'';$('vSave').textContent='💾 Update venue';$('vCancel').style.display='';scrollTo(0,0);});
+ $('vL').querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{if(confirm('Delete '+VN[+b.dataset.d].n+'?')){VN.splice(+b.dataset.d,1);vSaveAll();vDraw();}});}
+function vReset(){vEd=-1;for(const k in vKeys)document.getElementById(vKeys[k]).value=k=='s'?'Talking':'';document.getElementById('vSave').textContent='➕ Save venue';document.getElementById('vCancel').style.display='none';}
+document.getElementById('vSave').onclick=()=>{const v={};for(const k in vKeys)v[k]=document.getElementById(vKeys[k]).value.trim();if(!v.n)return alert('Add a venue name');if(vEd>=0)VN[vEd]=v;else VN.unshift(v);vSaveAll();vReset();vDraw();};
+document.getElementById('vCancel').onclick=vReset;
 </script></body></html>
