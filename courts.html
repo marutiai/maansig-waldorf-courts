@@ -67,8 +67,25 @@ main{padding:10px;max-width:1100px;margin:auto}
 .gm{background:#1c2833;color:#fff;border-radius:6px;padding:3px 4px;line-height:1.2}
 .gm b{display:block;font-size:13px}
 .gm span{font-size:11px;opacity:.85}
+
+.tabs{display:flex;gap:6px;margin-top:10px}.tabs button{border:none;border-radius:8px 8px 0 0;padding:8px 14px;font-size:15px;background:#3b6a96;color:#fff;cursor:pointer}.tabs button.on{background:#f4f6f8;color:#1c2833;font-weight:700}
+#pt{display:none;padding:10px;max-width:1300px;margin:auto}
+#pt .grid{display:grid;grid-template-columns:320px 1fr;gap:12px}@media(max-width:900px){#pt .grid{grid-template-columns:1fr}}
+#pt .card{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 3px #0001;margin-bottom:12px}
+#pt h3{margin:0 0 8px;font-size:16px}
+#pt label{display:flex;justify-content:space-between;align-items:center;margin:6px 0;gap:8px;font-size:14px}
+#pt input[type=number],#pt select{width:130px;padding:5px;border:1px solid #ccd;border-radius:6px;font-size:14px}
+#pt input[type=range]{width:130px}
+#pt .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+#pt .kpi{background:#f4f6f8;border-radius:10px;padding:8px 10px}#pt .kpi small{display:block;color:#667;font-size:12px}#pt .kpi b{font-size:20px}
+#pt .pos{color:#1e8449}#pt .neg{color:#c0392b}
+#pt .btn{border:1px solid #ccd;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px;margin:4px 4px 0 0}
+#pt .btn.pri{background:#1f4e79;color:#fff;border-color:#1f4e79}
+#pt table{width:100%;border-collapse:collapse;font-size:13px}#pt td,#pt th{padding:5px 4px;border-bottom:1px solid #eee;text-align:left}
+#pt .prog{height:16px;background:#eef1f3;border-radius:8px;overflow:hidden}#pt .prog i{display:block;height:100%;background:linear-gradient(90deg,#d68910,#1e8449)}
+#pt svg text{font:11px system-ui;fill:#445}
 </style></head><body>
-<header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p></header>
+<header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p><div class="tabs"><button id="tCal" class="on">📅 Calendar</button><button id="tPro">💷 Profit</button></div></header>
 <main>
 <div class="chips"><span class="lbl">Venues</span><span id="venues" class="chips" style="margin:0"></span></div>
 <div class="chips"><span class="lbl">Length</span><span id="dur" class="chips" style="margin:0"></span></div>
@@ -93,6 +110,26 @@ main{padding:10px;max-width:1100px;margin:auto}
 <div id="plan"></div>
 <p class="muted">Tap a day to open it. Tap a slot to add it to <b>My plan</b> (tap again to remove). Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days. In2Sports (Canary Wharf) is entered by hand from Maansi's list. Borough Academy shows times when at least 1 court is free (it doesn't say how many), so set Min courts to 1 to see it.</p>
 </main>
+<section id="pt"><div class="grid"><div>
+<div class="card"><h3>⚙️ Session</h3>
+<label>Venue <select id="pV"></select></label>
+<label>£ per court/hr <input id="pR" type="number" step="0.01"></label>
+<label>Courts <input id="pC" type="number" min="1" max="8" value="2"></label>
+<label>Hours <select id="pH"><option>1</option><option>1.5</option><option selected>2</option><option>2.5</option><option>3</option></select></label>
+<label>Fill <span><input id="pF" type="range" min="0" max="100" step="5" value="100"> <b id="pFv"></b></span></label>
+<label>£ per player <input id="pT" type="number" step="0.5" value="14"></label>
+<label>Racket hires (+£2 each) <input id="pK" type="number" min="0" value="0"></label>
+<label>Shuttles/other £ per session <input id="pX" type="number" step="1" value="0"></label>
+<label>Sessions per week <input id="pS" type="number" min="0" max="14" value="1"></label>
+<label>Monthly profit target £ <input id="pG" type="number" step="100" value="4000"></label>
+<button class="btn pri" id="pAdd">➕ Save scenario</button></div>
+</div><div>
+<div class="card"><h3 id="pTitle"></h3><div class="kpis" id="pK1"></div>
+<div style="margin-top:10px"><small>Progress to monthly target (this scenario alone)</small><div class="prog"><i id="pBar"></i></div><small id="pBarT"></small></div></div>
+<div class="card"><h3>📈 Profit by number of players</h3><div id="pCh1"></div></div>
+<div class="card"><h3>🏟 Same session at every venue</h3><div id="pCh2"></div></div>
+<div class="card"><h3>📊 Saved scenarios</h3><div id="pCh3"></div><div id="pTab"></div></div>
+</div></div></section>
 <div id="dayModal"><div class="box"><h2><span id="dTitle"></span><button id="dClose">Close ✕</button></h2><div id="dGrid"></div><div id="dList" class="list"></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -251,4 +288,42 @@ function openDay(k){ openK=k;
  $('cAdd').onclick=()=>{cmp.push(g());localStorage.setItem('wfCmp',JSON.stringify(cmp));draw();};
  $('cClr').onclick=()=>{cmp=[];localStorage.removeItem('wfCmp');draw();};
  setV();draw();})();
+
+(()=>{const PV=[['GGS (peak)',19],['GGS (off-peak)',17],['GGS whole hall (3 courts)',0,3,64],['Royal Docks',18.5],['Bow School',13],['Somers Town',16],['Somers Town (block)',14],['LSBU (weekday eve)',17],['LSBU (weekend)',15],['Borough Academy (single, inc VAT)',25.2],['Borough Academy whole hall (4, inc VAT)',0,4,83.28],['In2Sports',0],['Custom',0]];
+ const q=$;let sc=JSON.parse(localStorage.getItem('wfScen')||'[]');const W=4.33;
+ q('tCal').onclick=()=>{q('tCal').className='on';q('tPro').className='';document.querySelector('main').style.display='';q('pt').style.display='none';};
+ q('tPro').onclick=()=>{q('tPro').className='on';q('tCal').className='';document.querySelector('main').style.display='none';q('pt').style.display='block';calc();};
+ q('pV').innerHTML=PV.map((v,i)=>`<option value="${i}">${v[0]}</option>`).join('');
+ const m=n=>'£'+Math.round(n).toLocaleString('en-GB'),m2=n=>'£'+n.toFixed(2);
+ const costOf=(v,cts,h,rate)=>v[2]?v[3]*h:rate*cts*h;
+ const st=()=>{const v=PV[+q('pV').value],h=+q('pH').value,cts=+q('pC').value||1,rate=+q('pR').value||0,cap=cts*8,pl=Math.round(cap*(+q('pF').value)/100),tk=+q('pT').value||0,rk=(+q('pK').value||0)*2,x=+q('pX').value||0,ss=+q('pS').value||0;
+   const cost=costOf(v,cts,h,rate)+x,rev=pl*tk+rk,pr=rev-cost;return {name:v[0],vi:+q('pV').value,h,cts,rate,cap,pl,tk,rk,x,ss,cost,rev,pr,be:tk?Math.ceil(cost/tk):0,wk:pr*ss,mo:pr*ss*W};};
+ const bars=(items,opt={})=>{const wv=Math.max(320,items.length*70),H=200,pad=30,mx=Math.max(1,...items.map(i=>Math.max(i.a,i.b||0,0))),mn=Math.min(0,...items.map(i=>Math.min(i.a,i.b||0)));const sc2=v=>H-pad-(v-mn)/(mx-mn)*(H-2*pad);
+   let s=`<svg viewBox="0 0 ${wv} ${H+40}" width="100%" style="max-height:280px"><line x1="0" x2="${wv}" y1="${sc2(0)}" y2="${sc2(0)}" stroke="#bbb"/>`;
+   const bw=wv/items.length;items.forEach((it,i)=>{const x=i*bw+bw*.15,w=bw*(it.b!==undefined?.33:.7);
+     const r=(val,col,xo)=>{const y1=sc2(Math.max(val,0)),y2=sc2(Math.min(val,0));s+=`<rect x="${x+xo}" y="${y1}" width="${w}" height="${Math.max(1,y2-y1)}" rx="3" fill="${col}"><title>${m(val)}</title></rect><text x="${x+xo+w/2}" y="${(val>=0?y1-4:y2+12)}" text-anchor="middle">${m(val)}</text>`;};
+     if(it.b!==undefined){r(it.b,'#95a5a6',0);r(it.a,it.a>=0?'#1e8449':'#c0392b',w+2);}else r(it.a,it.c||(it.a>=0?'#1e8449':'#c0392b'),0);
+     s+=`<text x="${i*bw+bw/2}" y="${H+4}" text-anchor="middle">${it.l.slice(0,16)}</text>`+(it.l2?`<text x="${i*bw+bw/2}" y="${H+18}" text-anchor="middle">${it.l2}</text>`:'');});
+   return s+'</svg>'+(opt.legend||'');};
+ function calc(){const r=st();q('pFv').textContent=`${q('pF').value}% (${r.pl}/${r.cap})`;
+   q('pTitle').textContent=`${r.name} · ${r.cts} court${r.cts>1?'s':''} · ${r.h}h · ${r.pl} players`;
+   const k=[['Court + other cost',m2(r.cost)],['Takings',m2(r.rev)],['Profit / session',`<span class="${r.pr>=0?'pos':'neg'}">${m2(r.pr)}</span>`],['Margin',r.rev?Math.round(r.pr/r.rev*100)+'%':'–'],['Profit / player',r.pl?m2(r.pr/r.pl):'–'],['Break-even',`${r.be} players`],['Per week',m(r.wk)],['Per month',m(r.mo)]];
+   q('pK1').innerHTML=k.map(([a,b])=>`<div class="kpi"><small>${a}</small><b>${b}</b></div>`).join('');
+   const G=+q('pG').value||1,pc=Math.max(0,Math.min(100,r.mo/G*100));q('pBar').style.width=pc+'%';q('pBarT').textContent=`${m(r.mo)} of ${m(G)} a month (${Math.round(pc)}%)`+(r.pr>0&&r.mo<G?` · need about ${Math.ceil(G/W/r.pr)} sessions like this a week`:'');
+   const steps=[];for(let p=0;p<=r.cap;p+=Math.max(1,Math.round(r.cap/12)))steps.push(p);if(steps[steps.length-1]!==r.cap)steps.push(r.cap);
+   q('pCh1').innerHTML=bars(steps.map(p=>({a:p*r.tk+r.rk-r.cost,l:p+' pl',c:p===r.pl?'#1f4e79':undefined}))).replace('</svg>','</svg>')+`<small>Dark blue = your current fill. Break-even at ${r.be} players.</small>`;
+   const all=PV.map((v,i)=>({v,i})).filter(o=>o.v[1]||o.v[2]).map(o=>{const cts=o.v[2]||r.cts,pl=Math.round(cts*8*(+q('pF').value)/100),cost=costOf(o.v,cts,r.h,o.v[1])+r.x;return {a:pl*r.tk+r.rk-cost,b:cost,l:o.v[0].replace(/ \(.*?\)/,''),l2:(o.v[0].match(/\((.*?)\)/)||['',''])[1].slice(0,16)};});
+   q('pCh2').innerHTML=bars(all)+`<small><span style="color:#95a5a6">■</span> cost &nbsp; <span class="pos">■</span> profit · ${r.cts} courts (whole halls use their own court count), ${r.h}h, ${q('pF').value}% full, £${r.tk}/player</small>`;
+   drawSc();}
+ function drawSc(){if(!sc.length){q('pCh3').innerHTML='<small class="muted">Save scenarios to compare them here, e.g. the same night at different venues, or 2 vs 3 courts.</small>';q('pTab').innerHTML='';return;}
+   q('pCh3').innerHTML=bars(sc.map(s=>({a:s.pr,b:s.cost,l:s.name.replace(/ \(.*?\)/,''),l2:`${s.cts}ct ${s.h}h ${s.pl}pl`})));
+   const tw=sc.reduce((t,s)=>t+s.wk,0),G=+q('pG').value||1;
+   q('pTab').innerHTML='<table><tr><th>Scenario</th><th>Cost</th><th>Takings</th><th>Profit</th><th>/wk</th><th>/month</th><th></th></tr>'+sc.map((s,i)=>`<tr><td>${s.name}<br><small class="muted">${s.cts} ct · ${s.h}h · ${s.pl}/${s.cap} pl · £${s.tk} · ${s.ss}×/wk</small></td><td>${m(s.cost)}</td><td>${m(s.rev)}</td><td class="${s.pr>=0?'pos':'neg'}"><b>${m(s.pr)}</b></td><td>${m(s.wk)}</td><td>${m(s.wk*W)}</td><td><button class="btn" data-ps="${i}">✕</button></td></tr>`).join('')+
+     `<tr><td><b>All saved together</b></td><td></td><td></td><td></td><td><b>${m(tw)}</b></td><td><b>${m(tw*W)}</b></td><td></td></tr></table><small>Together = ${Math.round(tw*W/G*100)}% of your ${m(G)}/month target.</small> <button class="btn" id="pClr">Clear all</button>`;
+   document.querySelectorAll('[data-ps]').forEach(b=>b.onclick=()=>{sc.splice(+b.dataset.ps,1);localStorage.setItem('wfScen',JSON.stringify(sc));drawSc();});
+   q('pClr').onclick=()=>{if(confirm('Clear all scenarios?')){sc=[];localStorage.removeItem('wfScen');drawSc();}};}
+ const setV=()=>{const v=PV[+q('pV').value];if(v[2]){q('pC').value=v[2];q('pC').disabled=true;q('pR').value=(v[3]/v[2]).toFixed(2);q('pR').disabled=true;}else{q('pC').disabled=false;q('pR').disabled=false;q('pR').value=v[1]||q('pR').value||'';}calc();};
+ q('pV').onchange=setV;['pR','pC','pF','pT','pK','pX','pS','pG'].forEach(id=>q(id).oninput=calc);q('pH').onchange=()=>{q('pT').value=+q('pH').value===1?10:14;calc();};
+ q('pAdd').onclick=()=>{sc.push(st());localStorage.setItem('wfScen',JSON.stringify(sc));drawSc();};
+ setV();})();
 </script></body></html>
