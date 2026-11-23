@@ -8,6 +8,12 @@ header{background:#1f4e79;color:#fff;padding:14px 16px}
 header h1{font-size:20px;margin:0}
 header p{margin:4px 0 0;font-size:13px;opacity:.85}
 main{padding:10px;max-width:1100px;margin:auto}
+#wrap{display:block}#notesBox{display:none}
+@media(min-width:1000px){main{max-width:none}#wrap{display:flex;gap:12px;align-items:flex-start}#wrap>#view{flex:1;min-width:0}
+#notesBox{display:block;position:sticky;top:10px;background:#fff;border-radius:12px;padding:8px 10px;box-shadow:0 1px 3px #0002}
+#notesBox h2{margin:2px 0 6px;font-size:16px;display:flex;justify-content:space-between;align-items:center}
+#notes{width:300px;height:500px;min-width:180px;min-height:120px;max-width:60vw;resize:both;font:14px/1.4 system-ui;border:1px solid #ccd;border-radius:8px;padding:8px;box-sizing:border-box}
+#notesBox .sz button{font-size:12px;padding:2px 6px;margin-left:3px;border:1px solid #ccd;border-radius:6px;background:#f4f6f8;cursor:pointer}}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;align-items:center}
 .chip{border:2px solid #d5dbe0;background:#fff;border-radius:22px;padding:9px 15px;font-size:15px;font-weight:500}
 .chip.on{background:#1f4e79;border-color:#1f4e79;color:#fff}
@@ -70,7 +76,9 @@ main{padding:10px;max-width:1100px;margin:auto}
   <span class="lbl" style="margin-left:6px">View</span><button class="chip" data-view="month">Month</button><button class="chip" data-view="week">Week</button></div>
 <div class="bar"><button id="prev">‹</button><b id="label"></b><button id="next">›</button></div>
 <div class="legend" id="legend"></div>
-<div id="view"></div>
+<div id="wrap"><div id="view"></div>
+<aside id="notesBox"><h2>📝 Notes<span class="sz"><button data-sz="tall">Tall</button><button data-sz="square">Square</button><button data-sz="wide">Wide</button></span></h2>
+<textarea id="notes" placeholder="Your notes… (saved on this computer). Drag the bottom-right corner to resize."></textarea><div class="muted" id="notesSaved" style="font-size:12px"></div></aside></div>
 <div id="plan"></div>
 <p class="muted">Tap a day to open it. Tap a slot to add it to <b>My plan</b> (tap again to remove). Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days. In2Sports (Canary Wharf) is entered by hand from Maansi's list. Borough Academy shows times when at least 1 court is free (it doesn't say how many), so set Min courts to 1 to see it.</p>
 </main>
@@ -208,4 +216,12 @@ function openDay(k){ openK=k;
   document.querySelectorAll('#dayModal [data-k]').forEach(e=>e.onclick=ev=>{ev.stopPropagation();togglePick(e.dataset.k);});
   $('dayModal').style.display='block'; window.scrollTo(0,0);
 }
+
+(()=>{const n=$('notes');if(!n)return;n.value=localStorage.getItem('wfNotes')||'';
+ const sz=JSON.parse(localStorage.getItem('wfNotesSize')||'null');if(sz){n.style.width=sz[0]+'px';n.style.height=sz[1]+'px';}
+ let t;n.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(()=>{localStorage.setItem('wfNotes',n.value);$('notesSaved').textContent='Saved';},400);});
+ const save=()=>localStorage.setItem('wfNotesSize',JSON.stringify([n.offsetWidth,n.offsetHeight]));
+ new ResizeObserver(()=>{if(n.offsetWidth)save();}).observe(n);
+ const P={tall:[300,650],square:[400,400],wide:[560,280]};
+ document.querySelectorAll('[data-sz]').forEach(b=>b.onclick=()=>{const[w,h]=P[b.dataset.sz];n.style.width=w+'px';n.style.height=h+'px';save();});})();
 </script></body></html>
