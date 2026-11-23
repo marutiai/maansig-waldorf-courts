@@ -83,7 +83,7 @@ main{padding:10px;max-width:1100px;margin:auto}
 #pt .btn.pri{background:#1f4e79;color:#fff;border-color:#1f4e79}
 #pt table{width:100%;border-collapse:collapse;font-size:16px}#pt td,#pt th{padding:5px 4px;border-bottom:1px solid #eee;text-align:left}
 #pt .prog{height:16px;background:#eef1f3;border-radius:8px;overflow:hidden}#pt .prog i{display:block;height:100%;background:linear-gradient(90deg,#d68910,#1e8449)}
-#pt svg text{font:13px system-ui;fill:#445}#pt small{font-size:15px}
+#pt .opts{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}#pt .opts button{border:1px solid #ccd;background:#fff;border-radius:18px;padding:7px 12px;font-size:16px;cursor:pointer}#pt .opts button.on{background:#1f4e79;color:#fff;border-color:#1f4e79}#pt .hid{display:none!important}#pt svg text{font:13px system-ui;fill:#445}#pt small{font-size:15px}
 </style></head><body>
 <header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p><div class="tabs"><button id="tCal" class="on">📅 Calendar</button><button id="tPro">💷 Profit</button></div></header>
 <main>
@@ -326,4 +326,14 @@ function openDay(k){ openK=k;
  q('pV').onchange=setV;['pR','pC','pF','pT','pK','pX','pS','pG'].forEach(id=>q(id).oninput=calc);q('pH').onchange=()=>{q('pT').value=+q('pH').value===1?10:14;calc();};
  q('pAdd').onclick=()=>{sc.push(st());localStorage.setItem('wfScen',JSON.stringify(sc));drawSc();};
  setV();})();
+
+(()=>{const q=$;const O={pV:null,pC:[1,2,3,4,5,6],pH:[1,1.5,2,2.5,3],pF:[25,50,75,100],pT:[10,11,12,14,16],pK:[0,1,2,3,4],pS:[1,2,3,4,5]};
+ const U={pC:'',pH:'h',pF:'%',pT:'£',pK:'',pS:'×'};
+ const lab=v=>v;
+ for(const id in O){const el=q(id);if(!el)continue;const L=el.closest('label');const d=document.createElement('div');d.className='opts';d.dataset.for=id;L.after(d);
+   if(id==='pV'){el.classList.add('hid');[...el.options].forEach(o=>{d.insertAdjacentHTML('beforeend',`<button data-o="${o.value}">${o.text.replace(' (single, inc VAT)',' single').replace(' whole hall (4, inc VAT)',' whole hall')}</button>`);});}
+   else{if(id==='pH')el.classList.add('hid');O[id].forEach(v=>d.insertAdjacentHTML('beforeend',`<button data-o="${v}">${U[id]==='£'?'£'+v:v+U[id]}</button>`));}
+   d.onclick=e=>{const b=e.target.closest('button');if(!b||el.disabled)return;el.value=b.dataset.o;(el.onchange||el.oninput)?.call(el);if(el.oninput&&el.onchange&&id!=='pV'&&id!=='pH')el.oninput.call(el);hl();};}
+ const hl=()=>document.querySelectorAll('#pt .opts').forEach(d=>{const v=q(d.dataset.for).value;d.querySelectorAll('button').forEach(b=>b.classList.toggle('on',+b.dataset.o===+v&&b.dataset.o!==''&&String(+b.dataset.o)===String(+v)));});
+ document.getElementById('pt').addEventListener('input',hl);hl();})();
 </script></body></html>
