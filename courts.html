@@ -70,8 +70,8 @@ main{padding:10px;max-width:1100px;margin:auto}
   <span class="lbl" style="margin-left:6px">View</span><button class="chip" data-view="month">Month</button><button class="chip" data-view="week">Week</button></div>
 <div class="bar"><button id="prev">‹</button><b id="label"></b><button id="next">›</button></div>
 <div class="legend" id="legend"></div>
-<div id="plan"></div>
 <div id="view"></div>
+<div id="plan"></div>
 <p class="muted">Tap a day to open it. Tap a slot to add it to <b>My plan</b> (tap again to remove). Free courts are estimated from each venue's "% busy". Check on the booking site before booking. George Green's only shows the next 7 days. In2Sports (Canary Wharf) is entered by hand from Maansi's list. Borough Academy shows times when at least 1 court is free (it doesn't say how many), so set Min courts to 1 to see it.</p>
 </main>
 <div id="dayModal"><div class="box"><h2><span id="dTitle"></span><button id="dClose">Close ✕</button></h2><div id="dGrid"></div><div id="dList" class="list"></div></div></div>
@@ -149,11 +149,13 @@ function renderPlan(){
     return `<div class="wk"><div class="hd"><span>Week of ${md.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span><span class="${ok?'ok':'need'}">${l.length}/${target} ${ok?'✓':'· need '+(target-l.length)+' more'}</span></div>
       ${l.map(s=>{const[a,b]=span(s),hrs=(b-a)/60,r=rate(s),c=r?r*minC*hrs:null; if(c)tot+=c;
         return `<div class="pk" style="border-color:${COL[s[2]]}"><span>${new Date(s[0]+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'})} · <b>${rng(a,b)}</b> · ${s[2]} (${s[4]} free)${c?` · ≈£${c.toFixed(0)}`:''}</span><button data-un="${esc(keyOf(s))}">✕</button></div>`;}).join('')}</div>`;}).join('');
-  $('plan').innerHTML=`<h2>🗓 My plan</h2>
-    <div class="chips"><span class="lbl">Games per week</span>${[1,2,3,4,5].map(n=>`<button class="chip ${target===n?'on':''}" data-t="${n}">${n}</button>`).join('')}</div>
+  const mini=localStorage.getItem('wfPlanMin')==='1';
+  $('plan').innerHTML=`<h2 id="planHd" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🗓 My plan${ps.length?` (${ps.length})`:''}<span style="font-size:14px;font-weight:normal">${mini?'▸ Show':'▾ Hide'}</span></h2>
+    ${mini?'':`<div class="chips"><span class="lbl">Games per week</span>${[1,2,3,4,5].map(n=>`<button class="chip ${target===n?'on':''}" data-t="${n}">${n}</button>`).join('')}</div>
     ${ps.length?body+`<p class="muted">Cost ≈ ${minC} court${minC>1?'s':''} × hours × price${tot?` · total ≈ £${tot.toFixed(0)}`:''}</p>
       <div class="chips"><button class="chip" id="copyPlan">📋 Copy plan</button><button class="chip" id="clearPlan">Clear</button></div>`
-      :'<p class="muted">Tap slots on the calendar to try out a schedule. Each week shows how many you\'ve picked against your target.</p>'}`;
+      :'<p class="muted">Tap slots on the calendar to try out a schedule. Each week shows how many you\'ve picked against your target.</p>'}`}`;
+  $('planHd').onclick=()=>{localStorage.setItem('wfPlanMin',mini?'0':'1');renderPlan();};
   document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{target=+b.dataset.t;localStorage.setItem('wfTarget',target);draw();});
   document.querySelectorAll('[data-un]').forEach(b=>b.onclick=()=>{delete picks[b.dataset.un];savePicks();draw();});
   const cp=$('copyPlan'); if(cp) cp.onclick=async()=>{const t='Court plan\n'+ps.map(s=>{const[a,b]=span(s);return `${new Date(s[0]+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})} ${rng(a,b)} ${s[2]}`;}).join('\n');
