@@ -78,6 +78,12 @@ main{padding:10px;max-width:1100px;margin:auto}
 #vt .fg{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
 #vt button{padding:7px 14px;border-radius:8px;border:1px solid #ccd;background:#f4f6f8;font-size:16px;cursor:pointer}
 #vt .flt button.on{background:#2c3e50;color:#fff}
+#fb{display:none;padding:10px;max-width:900px;margin:auto;font-size:17px}
+#fb .card{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 3px #0001;margin-bottom:10px}
+#fb .fc{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}#fb .fc .lbl{font-weight:600;margin-right:4px;font-size:15px}
+#fb .fc button{border:1px solid #ccd;background:#fff;border-radius:18px;padding:6px 12px;font-size:15px;cursor:pointer}#fb .fc button.on{background:#2c3e50;color:#fff;border-color:#2c3e50}
+#fb .dh{font-weight:700;margin:12px 0 4px}#fb .sl{display:flex;justify-content:space-between;gap:8px;padding:7px 10px;border-left:5px solid #ccc;background:#fff;border-radius:8px;margin:4px 0;box-shadow:0 1px 2px #0001}
+#fb .muted{color:#667;font-size:14px}
 #pt{display:none;padding:10px;max-width:1500px;margin:auto}
 #pt .grid{display:grid;grid-template-columns:380px 1fr;gap:12px}@media(max-width:900px){#pt .grid{grid-template-columns:1fr}}
 #pt .card{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 3px #0001;margin-bottom:12px}
@@ -94,7 +100,7 @@ main{padding:10px;max-width:1100px;margin:auto}
 #pt .prog{height:16px;background:#eef1f3;border-radius:8px;overflow:hidden}#pt .prog i{display:block;height:100%;background:linear-gradient(90deg,#d68910,#1e8449)}
 #pt .opts{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}#pt .opts button{border:1px solid #ccd;background:#fff;border-radius:18px;padding:7px 12px;font-size:16px;cursor:pointer}#pt .opts button.on{background:#1f4e79;color:#fff;border-color:#1f4e79}#pt .hid{display:none!important}#pt svg text{font:13px system-ui;fill:#445}#pt small{font-size:15px}
 </style></head><body>
-<header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p><div class="tabs"><button id="tCal" class="on">📅 Calendar</button><button id="tPro">💷 Profit</button><button id="tVen">📍 Venues</button></div></header>
+<header><h1>🏸 Waldorf Court Calendar</h1><p id="upd"></p><div class="tabs"><button id="tCal" class="on">📅 Calendar</button><button id="tPro">💷 Profit</button><button id="tVen">📍 Venues</button><button id="tFb">⚽ Football</button></div></header>
 <main>
 <div class="chips"><span class="lbl">Venues</span><span id="venues" class="chips" style="margin:0"></span></div>
 <div class="chips"><span class="lbl">Length</span><span id="dur" class="chips" style="margin:0"></span></div>
@@ -145,6 +151,13 @@ main{padding:10px;max-width:1100px;margin:auto}
 <div class="card"><h3>🏟 Same session at every venue</h3><div id="pCh2"></div></div>
 <div class="card"><h3>📊 Saved scenarios</h3><div id="pCh3"></div><div id="pTab"></div></div>
 </div></div></section>
+<section id="fb"><div class="card"><h3 style="margin:0 0 6px">⚽ Football pitches</h3>
+<div class="fc"><span class="lbl">Pitch</span><span id="fbS"></span></div>
+<div class="fc"><span class="lbl">When</span><span id="fbW"></span></div>
+<div class="fc"><span class="lbl">Length</span><span id="fbL"></span></div>
+<div class="fc"><span class="lbl">Venues</span><span id="fbV"></span></div>
+<p class="muted" id="fbU"></p></div><div id="fbList"></div>
+<p class="muted">Royal Docks Academy 3G pitch (SchoolHire, E16 3HS, floodlit): full 95×48m £108/hr, half 48×48m £54/hr, VAT may be added; bookable weekdays 6–10pm, weekends 9am–4pm. "Half" means at least half the pitch is free. George Green's 6-a-side half pitch: £56 per 55 min, only the next 7 days are released. Check the booking site before booking.</p></section>
 <div id="dayModal"><div class="box"><h2><span id="dTitle"></span><button id="dClose">Close ✕</button></h2><div id="dGrid"></div><div id="dList" class="list"></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -306,8 +319,8 @@ function openDay(k){ openK=k;
 
 (()=>{const PV=[['GGS (peak)',19],['GGS (off-peak)',17],['GGS whole hall (3 courts)',0,3,64],['Royal Docks',18.5],['Bow School',13],['Somers Town',16],['Somers Town (block)',14],['LSBU (weekday eve)',17],['LSBU (weekend)',15],['Borough Academy (single, inc VAT)',25.2],['Borough Academy whole hall (4, inc VAT)',0,4,83.28],['In2Sports',0],['Custom',0]];
  const q=$;let sc=JSON.parse(localStorage.getItem('wfScen')||'[]');const W=4.33;
- const tab=t=>{['tCal','tPro','tVen'].forEach(k=>q(k).className=k==t?'on':'');document.querySelector('main').style.display=t=='tCal'?'':'none';q('pt').style.display=t=='tPro'?'block':'none';q('vt').style.display=t=='tVen'?'block':'none';if(t=='tPro')calc();if(t=='tVen')vDraw();};
- q('tCal').onclick=()=>tab('tCal');q('tPro').onclick=()=>tab('tPro');q('tVen').onclick=()=>tab('tVen');
+ const tab=t=>{['tCal','tPro','tVen','tFb'].forEach(k=>q(k).className=k==t?'on':'');document.querySelector('main').style.display=t=='tCal'?'':'none';q('pt').style.display=t=='tPro'?'block':'none';q('vt').style.display=t=='tVen'?'block':'none';q('fb').style.display=t=='tFb'?'block':'none';if(t=='tFb')fDraw();if(t=='tPro')calc();if(t=='tVen')vDraw();};
+ q('tCal').onclick=()=>tab('tCal');q('tPro').onclick=()=>tab('tPro');q('tVen').onclick=()=>tab('tVen');q('tFb').onclick=()=>tab('tFb');
  
  q('pV').innerHTML=PV.map((v,i)=>`<option value="${i}">${v[0]}</option>`).join('');
  const m=n=>'£'+Math.round(n).toLocaleString('en-GB'),m2=n=>'£'+n.toFixed(2);
@@ -370,4 +383,24 @@ function vDraw(){const $=id=>document.getElementById(id);
 function vReset(){vEd=-1;for(const k in vKeys)document.getElementById(vKeys[k]).value=k=='s'?'Talking':'';document.getElementById('vSave').textContent='➕ Save venue';document.getElementById('vCancel').style.display='none';}
 document.getElementById('vSave').onclick=()=>{const v={};for(const k in vKeys)v[k]=document.getElementById(vKeys[k]).value.trim();if(!v.n)return alert('Add a venue name');if(vEd>=0)VN[vEd]=v;else VN.unshift(v);vSaveAll();vReset();vDraw();};
 document.getElementById('vCancel').onclick=vReset;
+
+(()=>{let FB=[],fS='Half',fW=localStorage.getItem('wfFbW')||'eve',fL=60,fV=new Set(['Royal Docks',"George Green's"]);
+ const mn=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;},hm=m=>{const h=Math.floor(m/60),x=m%60,ap=h>=12?'pm':'am',hh=h%12||12;return hh+(x?':'+String(x).padStart(2,'0'):'')+ap;};
+ fetch('courts.json?'+Date.now()).then(r=>r.json()).then(j=>{FB=j.football||[];$('fbU').textContent=j.footballUpdated?'Football updated '+j.footballUpdated:'';fDraw();});
+ const chips=(id,opts,cur,set)=>{$(id).innerHTML=opts.map(([v,l])=>`<button data-x="${esc(v)}" class="${(cur instanceof Set?cur.has(v):cur==v)?'on':''}">${l}</button>`).join('');$(id).querySelectorAll('button').forEach(b=>b.onclick=()=>{set(b.dataset.x);fDraw();});};
+ window.fDraw=function(){
+  chips('fbS',[['Half','Half pitch'],['Full','Full pitch']],fS,v=>fS=v);
+  chips('fbW',[['eve','Weekdays 7–9pm'],['wkend','Weekends'],['both','Weekday 7–9pm + weekends'],['all','Any time']],fW,v=>{fW=v;localStorage.setItem('wfFbW',v);});
+  chips('fbL',[['60','1 hr'],['90','1.5 hr'],['120','2 hr']],String(fL),v=>fL=+v);
+  chips('fbV',[['Royal Docks','Royal Docks'],["George Green's","George Green's"]],fV,v=>{fV.has(v)?fV.delete(v):fV.add(v);});
+  const out={};
+  FB.forEach(r=>{if(!fV.has(r[2]))return;if(fS=='Full'&&r[4]!='Full')return;if(fS=='Half'&&r[4]!='Half')return;
+   const wd=!['Sat','Sun'].includes(r[1]);let [a,b]=r[3].split('-').map(mn);
+   if(fW=='eve'||fW=='both'){if(wd){a=Math.max(a,19*60);b=Math.min(b,21*60);}else if(fW=='eve')return;}
+   if(fW=='wkend'&&wd)return;
+   const need=r[2]=="George Green's"?55:fL;if(b-a<need)return;if(r[2]=="George Green's"&&fL>60)return;
+   (out[r[0]]=out[r[0]]||[]).push([r,a,b]);});
+  const ks=Object.keys(out).sort();
+  $('fbList').innerHTML=ks.length?ks.map(k=>`<div class="dh">${new Date(k+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</div>`+out[k].map(([r,a,b])=>`<div class="sl" style="border-left-color:${COL[r[2]]||'#999'}"><span><b>${hm(a)}–${hm(b)}</b> · ${esc(r[2])} · ${r[4]} pitch</span><span class="muted">${esc(r[5])}</span></div>`).join('')).join(''):'<div class="card muted">Nothing free for these filters.</div>';};
+})();
 </script></body></html>
