@@ -16,6 +16,10 @@ main{padding:12px;max-width:640px;margin:auto}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}
 .chip{border:2px solid #d5dbe0;background:#fff;border-radius:22px;padding:12px 16px;font-size:17px}
 .chip.on{background:#1e5631;border-color:#1e5631;color:#fff}
+.sc{display:flex;justify-content:space-around;align-items:center;font-size:44px;font-weight:700;margin:8px 0}
+.sc small{display:block;font-size:14px;font-weight:normal;color:#5d6d7e;text-align:center}
+.gl{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.gl button{padding:10px 4px;font-size:15px;border:2px solid #d5dbe0;background:#fff;border-radius:10px}
 .big{width:100%;padding:16px;font-size:18px;border:none;border-radius:12px;background:#1e5631;color:#fff;margin-top:8px}
 .ghost{background:#e5e8eb;color:#1c2833}
 h2{font-size:17px;margin:4px 0 8px}
@@ -24,7 +28,7 @@ h2{font-size:17px;margin:4px 0 8px}
 .muted{color:#5d6d7e;font-size:13px}
 input{font-size:17px;padding:10px;border:1px solid #ccd3d8;border-radius:8px;width:100%;box-sizing:border-box}
 </style></head><body>
-<header><h1>⚽ Waldorf Teams</h1><nav><button id="tP" class="on">Players</button> <button id="tT">Teams</button></nav></header>
+<header><h1>⚽ Waldorf Teams</h1><nav><button id="tP" class="on">Players</button> <button id="tT">Teams</button> <button id="tS">Scores</button></nav></header>
 <main>
 <section id="players">
   <p class="muted">Tap your name, pick positions and rate yourself.</p>
@@ -48,6 +52,12 @@ input{font-size:17px;padding:10px;border:1px solid #ccd3d8;border-radius:8px;wid
   <div id="out"></div>
   <div class="card"><b>Back up answers</b><p class="muted">Copies everyone's positions and ratings. Paste it in your chat with Isabella and she saves it to the sheet.</p><button class="big ghost" id="exp">📋 Copy answers for Isabella</button></div>
 </section>
+<section id="scores" style="display:none">
+  <div class="card" id="live"></div>
+  <div class="card"><h2>Results</h2><div id="res" class="muted">No games played yet</div></div>
+  <div class="card"><h2>⚽ Top scorers</h2><div id="lb" class="muted">No goals yet</div></div>
+  <div class="card"><button class="big ghost" id="expS">📋 Copy results for Isabella</button><button class="big ghost" id="clrS" style="color:#b03a2e">Clear all results</button></div>
+</section>
 </main>
 <script>
 const POS=['GK','Defence','Midfield','Left wing','Right wing','Attack'];
@@ -55,13 +65,18 @@ const K='wf-football';
 let S=JSON.parse(localStorage.getItem(K)||'{"players":[],"teams":2}');
 function save(){localStorage.setItem(K,JSON.stringify(S));}
 // names can arrive via private #setup= link, never stored in the repo
-if(location.hash.startsWith('#setup=')){try{const names=JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(7)))));
-  names.forEach(n=>{if(!S.players.some(p=>p.name===n))S.players.push({name:n,pos:[],rating:0});});save();}catch(e){}
+S.known=S.known||{};S.matches=S.matches||[];
+if(location.hash.startsWith('#setup=')){try{let d=JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(7)))));
+  const reset=!Array.isArray(d)&&d.reset;const list=(Array.isArray(d)?d:d.players).map(x=>typeof x==='string'?{name:x}:x);
+  S.players.forEach(p=>{if(p.rating)S.known[p.name]={pos:p.pos,rating:p.rating};});
+  if(reset){S.players=[];S.lastT=null;S.matches=[];}
+  list.forEach(x=>{if(S.players.some(p=>p.name===x.name))return;const k=x.rating?x:(S.known[x.name]||{});
+    S.players.push({name:x.name,pos:k.pos||[],rating:k.rating||0});});save();}catch(e){}
   history.replaceState(null,'',location.pathname);}
 const $=id=>document.getElementById(id);
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let cur=null,selPos=[],selRate=0;
-function show(id){['players','form','teams'].forEach(s=>$(s).style.display=s===id?'block':'none');$('tP').className=id==='teams'?'':'on';$('tT').className=id==='teams'?'on':'';}
+function show(id){['players','form','teams','scores'].forEach(s=>$(s).style.display=s===id?'block':'none');$('tP').className=(id==='players'||id==='form')?'on':'';$('tT').className=id==='teams'?'on':'';$('tS').className=id==='scores'?'on':'';}
 function renderNames(){const ps=S.players.slice().sort((a,b)=>a.name.localeCompare(b.name));
   $('names').innerHTML=ps.map(p=>`<button class="nm ${p.rating?'done':''}" data-n="${esc(p.name)}">${esc(p.name)}${p.rating?`<small>${p.pos.join(', ')||'-'} · ${p.rating}★</small>`:''}</button>`).join('');
   document.querySelectorAll('.nm').forEach(b=>b.onclick=()=>openForm(b.dataset.n));}
@@ -94,22 +109,46 @@ function makeTeams(rand){
       const d=Math.abs(sum(T[a])-sum(T[b])),d2=Math.abs(sum(T[a])-x.r+y.r-(sum(T[b])-y.r+x.r));
       if(d2<d&&(x.main===y.main||rand()<.15)){T[a][T[a].indexOf(x)]=y;T[b][T[b].indexOf(y)]=x;improved=true;}}
     if(!improved)break;}
-  lastT=T; drawTeams(T);}
+  lastT=T;S.lastT=T;save(); drawTeams(T);}
 function drawTeams(T){const sum=t=>t.reduce((s,p)=>s+p.r,0);
   const colours=['🔴 Red','🔵 Blue','🟡 Yellow','🟢 Green'];
   $('out').innerHTML=T.map((t,i)=>`<div class="card team"><h2>${colours[i]} <span>${t.length} players · ${sum(t)}★</span></h2>${t.sort((a,b)=>POS.indexOf(a.main)-POS.indexOf(b.main)).map(p=>`<div>${esc(p.name)} <span class="muted">${p.pos.join(', ')||'any'} · ${p.rating||'?'}★</span></div>`).join('')}</div>`).join('');}
-let lastT=null;
+let lastT=S.lastT||null;if(lastT)drawTeams(lastT);
 $('late').onclick=()=>{if(!lastT){alert('Make teams first');return;}
   const inT=new Set(lastT.flat().map(p=>p.name));
   const news=S.players.filter(p=>p.rating&&!inT.has(p.name)).map(p=>({...p,r:p.rating,main:p.pos[0]||'Any'})).sort((a,b)=>b.r-a.r);
   if(!news.length){alert('No new players filled in yet');return;}
   const sum=t=>t.reduce((s,p)=>s+p.r,0);
   for(const p of news){lastT.slice().sort((a,b)=>a.length-b.length||sum(a)-sum(b))[0].push(p);}
-  drawTeams(lastT);};
+  S.lastT=lastT;save();drawTeams(lastT);};
 $('make').onclick=()=>makeTeams(()=>0.5);$('again').onclick=()=>makeTeams(Math.random);
 $('exp').onclick=async()=>{const done=S.players.filter(p=>p.rating);
   const txt='Football answers ('+new Date().toLocaleDateString('en-GB')+'):\n'+done.map(p=>p.name+' | '+(p.pos.join(', ')||'any')+' | '+p.rating).join('\n');
   try{await navigator.clipboard.writeText(txt);alert('Copied '+done.length+' players. Now paste it in your chat with Isabella.');}
   catch(e){prompt('Copy this:',txt);}};
+// ---- Scores: pick two teams, tap a player each time they score
+const COL=['🔴 Red','🔵 Blue','🟡 Yellow','🟢 Green'];
+let live=null,pick=[];
+$('tS').onclick=()=>{drawScores();show('scores');};
+function drawScores(){const T=S.lastT;
+  if(!T){$('live').innerHTML='<p class="muted">Make teams first (Teams tab).</p>';}
+  else if(!live){$('live').innerHTML=`<h2>Game ${S.matches.length+1}: who's playing?</h2><div class="chips">${T.map((t,i)=>`<button class="chip ${pick.includes(i)?'on':''}" data-k="${i}">${COL[i]}</button>`).join('')}</div><button class="big" id="startG">Start game</button>`;
+    document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{const i=+b.dataset.k;pick=pick.includes(i)?pick.filter(x=>x!==i):[...pick,i].slice(-2);drawScores();});
+    $('startG').onclick=()=>{if(pick.length!==2){alert('Pick 2 teams');return;}live={t:pick.slice(),goals:[]};pick=[];drawScores();};}
+  else{const sc=i=>live.goals.filter(g=>g.t===i).length;
+    $('live').innerHTML=`<h2>Game ${S.matches.length+1}</h2><div class="sc">${live.t.map(i=>`<div>${sc(i)}<small>${COL[i]}</small></div>`).join('<div>–</div>')}</div>
+      <p class="muted">Tap the player who scored</p>${live.t.map(i=>`<b>${COL[i]}</b><div class="gl" style="margin:6px 0 12px">${T[i].map(p=>`<button data-g="${i}" data-n="${esc(p.name)}">${esc(p.name)} ${live.goals.filter(g=>g.n===p.name).map(()=>'⚽').join('')}</button>`).join('')}<button data-g="${i}" data-n="">Own goal / unknown</button></div>`).join('')}
+      <button class="big ghost" id="undoG">Undo last goal</button><button class="big" id="endG">Full time (save result)</button><button class="big ghost" id="quitG">Cancel game</button>`;
+    document.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{live.goals.push({t:+b.dataset.g,n:b.dataset.n});drawScores();});
+    $('undoG').onclick=()=>{live.goals.pop();drawScores();};
+    $('quitG').onclick=()=>{if(confirm('Cancel this game? Goals will be lost.')){live=null;drawScores();}};
+    $('endG').onclick=()=>{const [a,b]=live.t;S.matches.push({a:COL[a],b:COL[b],sa:sc(a),sb:sc(b),goals:live.goals.filter(g=>g.n).map(g=>g.n)});live=null;save();drawScores();};}
+  $('res').innerHTML=S.matches.length?S.matches.map((m,i)=>`<div>Game ${i+1}: ${m.a} <b>${m.sa} – ${m.sb}</b> ${m.b}${m.goals.length?` <span class="muted">(${m.goals.join(', ')})</span>`:''}</div>`).join(''):'No games played yet';
+  const c={};S.matches.forEach(m=>m.goals.forEach(n=>c[n]=(c[n]||0)+1));
+  const lb=Object.entries(c).sort((x,y)=>y[1]-x[1]);
+  $('lb').innerHTML=lb.length?lb.map(([n,g],i)=>`<div>${i+1}. ${esc(n)} <b style="float:right">${g}</b></div>`).join(''):'No goals yet';}
+$('expS').onclick=async()=>{const txt='Football results ('+new Date().toLocaleDateString('en-GB')+'):\n'+S.matches.map((m,i)=>`Game ${i+1}: ${m.a} ${m.sa}-${m.sb} ${m.b}${m.goals.length?' | scorers: '+m.goals.join(', '):''}`).join('\n');
+  try{await navigator.clipboard.writeText(txt);alert('Copied. Now paste it in your chat with Isabella.');}catch(e){prompt('Copy this:',txt);}};
+$('clrS').onclick=()=>{if(confirm('Clear all results?')){S.matches=[];live=null;save();drawScores();}};
 renderNames();
 </script></body></html>
