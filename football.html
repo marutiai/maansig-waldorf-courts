@@ -113,7 +113,17 @@ function makeTeams(rand){
   lastT=T;S.lastT=T;save(); drawTeams(T);}
 function drawTeams(T){const sum=t=>t.reduce((s,p)=>s+p.r,0);
   const colours=['🔴 Red','🔵 Blue','🟡 Yellow','🟢 Green'];
-  $('out').innerHTML=T.map((t,i)=>`<div class="card team"><h2>${colours[i]} <span>${t.length} players · ${sum(t)}★</span></h2>${t.sort((a,b)=>POS.indexOf(a.main)-POS.indexOf(b.main)).map(p=>`<div>${esc(p.name)} <span class="muted">${p.pos.join(', ')||'any'} · ${p.rating||'?'}★</span></div>`).join('')}</div>`).join('');}
+  T.forEach(t=>t.sort((a,b)=>POS.indexOf(a.main)-POS.indexOf(b.main)));
+  $('out').innerHTML=`<p class="muted">To change teams: tap a player, then tap another player to swap them, or tap a team name to move them there.</p>`+T.map((t,i)=>`<div class="card team"><h2 data-mt="${i}" style="cursor:pointer;${mv&&mv[0]!==i?'background:#eaf6ee;border-radius:8px;padding:4px':''}">${colours[i]} <span>${t.length} players · ${sum(t)}★</span>${mv&&mv[0]!==i?' ⬅ move here':''}</h2>${t.map((p,j)=>`<div data-mp="${i},${j}" style="cursor:pointer;padding:4px;border-radius:6px;${mv&&mv[0]===i&&mv[1]===j?'background:#fdebd0;font-weight:bold':''}">${esc(p.name)} <span class="muted">${p.pos.join(', ')||'any'} · ${p.rating||'?'}★</span></div>`).join('')}</div>`).join('');
+  const keep=()=>{lastT=T;S.lastT=T;mv=null;save();drawTeams(T);};
+  document.querySelectorAll('[data-mp]').forEach(d=>d.onclick=()=>{const [i,j]=d.dataset.mp.split(',').map(Number);
+    if(!mv){mv=[i,j];drawTeams(T);return;}
+    if(mv[0]===i&&mv[1]===j){mv=null;drawTeams(T);return;}
+    if(mv[0]===i){mv=[i,j];drawTeams(T);return;}
+    const a=T[mv[0]][mv[1]];T[mv[0]][mv[1]]=T[i][j];T[i][j]=a;keep();});
+  document.querySelectorAll('[data-mt]').forEach(h=>h.onclick=()=>{const i=+h.dataset.mt;if(!mv||mv[0]===i)return;
+    const [p]=T[mv[0]].splice(mv[1],1);T[i].push(p);keep();});}
+let mv=null;
 let lastT=S.lastT||null;if(lastT)drawTeams(lastT);
 $('late').onclick=()=>{if(!lastT){alert('Make teams first');return;}
   const inT=new Set(lastT.flat().map(p=>p.name));
