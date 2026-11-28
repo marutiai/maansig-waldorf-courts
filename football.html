@@ -46,7 +46,7 @@ input{font-size:17px;padding:10px;border:1px solid #ccd3d8;border-radius:8px;wid
 </div></section>
 <section id="teams" style="display:none">
   <div class="card"><b>Number of teams</b><div class="chips" id="nt"></div>
-  <label><input type="checkbox" id="onlyDone" style="width:auto" checked> Only players who've filled in details (latecomers can fill in later, then tap Make teams again)</label>
+  <label><input type="checkbox" id="onlyDone" style="width:auto" checked> Only players who've filled in details (players marked ⏳ Not here yet are left out)</label>
   <button class="big ghost" id="late">Add latecomers to current teams</button>
   <button class="big" id="make">Make teams</button><button class="big ghost" id="again">Shuffle (another fair split)</button></div>
   <div id="out"></div>
@@ -78,8 +78,9 @@ const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&qu
 let cur=null,selPos=[],selRate=0;
 function show(id){['players','form','teams','scores'].forEach(s=>$(s).style.display=s===id?'block':'none');$('tP').className=(id==='players'||id==='form')?'on':'';$('tT').className=id==='teams'?'on':'';$('tS').className=id==='scores'?'on':'';}
 function renderNames(){const ps=S.players.slice().sort((a,b)=>a.name.localeCompare(b.name));
-  $('names').innerHTML=ps.map(p=>`<button class="nm ${p.rating?'done':''}" data-n="${esc(p.name)}">${esc(p.name)}${p.rating?`<small>${p.pos.join(', ')||'-'} · ${p.rating}★</small>`:''}</button>`).join('');
-  document.querySelectorAll('.nm').forEach(b=>b.onclick=()=>openForm(b.dataset.n));}
+  $('names').innerHTML=ps.map(p=>`<div style="${p.away?'opacity:.45':''}"><button class="nm ${p.rating?'done':''}" style="width:100%" data-n="${esc(p.name)}">${esc(p.name)}${p.rating?`<small>${p.pos.join(', ')||'-'} · ${p.rating}★</small>`:''}</button><button class="aw" data-a="${esc(p.name)}" style="width:100%;margin-top:3px;padding:6px;border-radius:8px;border:1px solid #d5dbe0;background:${p.away?'#fdebd0':'#fff'};font-size:13px">${p.away?'⏳ Not here yet – tap when arrived':'✅ Here'}</button></div>`).join('');
+  document.querySelectorAll('.nm').forEach(b=>b.onclick=()=>openForm(b.dataset.n));
+  document.querySelectorAll('.aw').forEach(b=>b.onclick=()=>{const q=S.players.find(x=>x.name===b.dataset.a);q.away=!q.away;save();renderNames();});}
 function openForm(n){cur=S.players.find(p=>p.name===n);selPos=cur.pos.slice();selRate=cur.rating;$('who').textContent=cur.name;drawForm();show('form');}
 function drawForm(){$('pos').innerHTML=POS.map(x=>`<button class="chip ${selPos.includes(x)?'on':''}" data-p="${x}">${x}</button>`).join('');
   $('rate').innerHTML=[1,2,3,4,5].map(x=>`<button class="chip ${selRate===x?'on':''}" data-r="${x}">${x}</button>`).join('');
@@ -94,7 +95,7 @@ function drawNT(){$('nt').innerHTML=[2,3,4].map(x=>`<button class="chip ${S.team
   document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{S.teams=+b.dataset.t;save();drawNT();});}
 // Main position = first picked; GK counted separately so keepers spread out.
 function makeTeams(rand){
-  const pool=S.players.filter(p=>!$('onlyDone').checked||p.rating).map(p=>({...p,r:p.rating||3,main:p.pos[0]||'Any'}));
+  const pool=S.players.filter(p=>!p.away&&(!$('onlyDone').checked||p.rating)).map(p=>({...p,r:p.rating||3,main:p.pos[0]||'Any'}));
   const n=S.teams,T=[...Array(n)].map(()=>[]);
   const sum=t=>t.reduce((s,p)=>s+p.r,0);
   // group by main position, strongest first; each player to the weakest team (ties: fewest of that position, then fewest players)
@@ -116,7 +117,7 @@ function drawTeams(T){const sum=t=>t.reduce((s,p)=>s+p.r,0);
 let lastT=S.lastT||null;if(lastT)drawTeams(lastT);
 $('late').onclick=()=>{if(!lastT){alert('Make teams first');return;}
   const inT=new Set(lastT.flat().map(p=>p.name));
-  const news=S.players.filter(p=>p.rating&&!inT.has(p.name)).map(p=>({...p,r:p.rating,main:p.pos[0]||'Any'})).sort((a,b)=>b.r-a.r);
+  const news=S.players.filter(p=>p.rating&&!p.away&&!inT.has(p.name)).map(p=>({...p,r:p.rating,main:p.pos[0]||'Any'})).sort((a,b)=>b.r-a.r);
   if(!news.length){alert('No new players filled in yet');return;}
   const sum=t=>t.reduce((s,p)=>s+p.r,0);
   for(const p of news){lastT.slice().sort((a,b)=>a.length-b.length||sum(a)-sum(b))[0].push(p);}
