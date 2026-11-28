@@ -60,7 +60,7 @@ input{font-size:17px;padding:10px;border:1px solid #ccd3d8;border-radius:8px;wid
 </section>
 </main>
 <script>
-const POS=['GK','Defence','Midfield','Left wing','Right wing','Attack'];
+const POS=['GK','Defence','Midfield','Left wing','Right wing','Attack','Any position'];
 const K='wf-football';
 let S=JSON.parse(localStorage.getItem(K)||'{"players":[],"teams":2}');
 function save(){localStorage.setItem(K,JSON.stringify(S));}
@@ -84,7 +84,7 @@ function renderNames(){const ps=S.players.slice().sort((a,b)=>a.name.localeCompa
 function openForm(n){cur=S.players.find(p=>p.name===n);selPos=cur.pos.slice();selRate=cur.rating;$('who').textContent=cur.name;drawForm();show('form');}
 function drawForm(){$('pos').innerHTML=POS.map(x=>`<button class="chip ${selPos.includes(x)?'on':''}" data-p="${x}">${x}</button>`).join('');
   $('rate').innerHTML=[1,2,3,4,5].map(x=>`<button class="chip ${selRate===x?'on':''}" data-r="${x}">${x}</button>`).join('');
-  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{const p=b.dataset.p;selPos=selPos.includes(p)?selPos.filter(x=>x!==p):[...selPos,p];drawForm();});
+  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{const p=b.dataset.p;selPos=selPos.includes(p)?selPos.filter(x=>x!==p):p==='Any position'?[p]:[...selPos.filter(x=>x!=='Any position'),p];drawForm();});
   document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{selRate=+b.dataset.r;drawForm();});}
 $('save').onclick=()=>{if(!selRate){alert('Pick a rating 1-5');return;}cur.pos=selPos;cur.rating=selRate;save();renderNames();show('players');};
 $('cancel').onclick=()=>show('players');
